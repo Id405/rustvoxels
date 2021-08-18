@@ -1,0 +1,73 @@
+use shaderc::*;
+use std::{borrow::Cow, fs::read_to_string}; // bad form
+
+use wgpu::ShaderSource;
+
+trait ShaderUnwrap {
+    fn shader_unwrap(self) -> CompilationArtifact;
+}
+
+impl ShaderUnwrap for Result<CompilationArtifact> {
+    fn shader_unwrap(self) -> CompilationArtifact {
+        match self {
+            Ok(value) => value,
+            Err(error) => {
+                match error {
+                    Error::CompilationError(error_code, error_text) => panic!("{}", error_text),
+                    error => panic!("{}", error),
+                }
+            }
+        }
+    }
+}
+
+pub struct ShaderBundle<'a> {
+    pub vertex: ShaderSource<'a>,
+    pub fragment: ShaderSource<'a>,
+}
+
+impl<'a> ShaderBundle<'a> {
+    pub fn from_path<S: Into<String>>(path: S) -> Self {
+        let path = path.into();
+        let source_frag =
+            read_to_string(format!("shaders/{}.frag", path)).expect("unable to read shader file");
+        let source_vert =
+            read_to_string(format!("shaders/{}.vert", path)).expect("unable to read shader file");
+
+        let mut opts = CompileOptions::new().unwrap();
+        let mut compiler = Compiler::new().unwrap();
+
+        opts.set_source_language(SourceLanguage::GLSL);
+        opts.set_optimization_level(OptimizationLevel::Performance);
+        opts.set_target_env(TargetEnv::Vulkan, EnvVersion::WebGPU as u32); // Platform compatibility issues will come from this. Needa force vulkan for every platform
+
+        opts.set_include_callback(move |name, include_type, source_file, _| {
+            todo!();
+        }); // Panic on include
+
+        let fragment = compiler
+            .compile_into_spirv(
+                &source_frag,
+                ShaderKind::Fragment,
+                &format!("shaders/{}.frag", path),
+                "main",
+                Some(&opts),
+            )
+            .shader_unwrap();
+
+        let vertex = compiler
+            .compile_into_spirv(
+                &source_vert,
+                ShaderKind::Vertex,
+                &format!("shaders/{}.vert", path),
+                "main",
+                Some(&opts),
+            )
+            .shader_unwrap();
+
+        Self {
+            vertex: ShaderSource::SpirV(Cow::Owned(vertex.as_binary().to_owned())),
+            fragment: ShaderSource::SpirV(Cow::Owned(fragment.as_binary().to_owned())),
+        }
+    }
+}
