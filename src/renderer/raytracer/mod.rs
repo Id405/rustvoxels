@@ -5,9 +5,16 @@ use super::{glsl_loader, Vertex};
 
 mod uniforms;
 
-pub struct State {
+pub struct RenderState {
     // This type should go away and become part of the resources type
     size: winit::dpi::PhysicalSize<u32>,
+    frame_count: u32
+}
+
+impl RenderState {
+    pub fn size() -> winit::dpi::PhysicalSize<u32> {
+        size
+    }
 }
 
 pub struct Raytracer {
@@ -15,7 +22,7 @@ pub struct Raytracer {
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
-    state: State,
+    render_state: RenderState,
 }
 
 impl Raytracer {
@@ -40,7 +47,7 @@ impl Raytracer {
             source: shader_bundle.fragment,
         });
 
-        let uniforms = Uniforms::new();
+        let uniforms = Uniforms::new(&self.render_state);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Raytracing Uniforms"),
@@ -113,14 +120,14 @@ impl Raytracer {
             },
         });
 
-        let state = State { size };
+        let state = RenderState { size, frame_count: 0 };
 
         Self {
             render_pipeline,
             uniforms,
             uniform_buffer,
             uniform_bind_group,
-            state,
+            render_state: state,
         }
     }
 
@@ -129,7 +136,7 @@ impl Raytracer {
     }
 
     pub fn update_uniform_data(&mut self, queue: &wgpu::Queue) {
-        self.uniforms.update(&self.state);
+        self.uniforms.update(&self.render_state);
         queue.write_buffer(
             &self.uniform_buffer,
             0,
@@ -142,6 +149,11 @@ impl Raytracer {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.state.size = new_size;
+        self.render_state.size = new_size;
+    }
+
+    #[deprecated]
+    pub fn frame_complete(&mut self) {
+        self.render_state.frame_count += 1;
     }
 }

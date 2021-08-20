@@ -1,9 +1,5 @@
-mod world;
-mod voxel_grid;
-
-pub use voxel_grid::VoxelGrid;
-
 use crate::game::Player;
+use super::voxel_grid::VoxelGrid;
 
 #[derive(Default)]
 pub struct World {

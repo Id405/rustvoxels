@@ -19,9 +19,9 @@ fn main() {
 
     window.set_fullscreen(Some(Fullscreen::Borderless(None)));
 
-    use futures::executor::block_on;
+    let mut world = game::World::default();
 
-    let mut state = block_on(renderer::Renderer::new(&window));
+    let mut renderer = futures::executor::block_on(renderer::Renderer::new(&window, &world));
 
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -29,7 +29,7 @@ fn main() {
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-                if !state.input(event) {
+                if !renderer.input(event) {
                     // UPDATED!
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
@@ -42,21 +42,21 @@ fn main() {
                             _ => {}
                         },
                         WindowEvent::Resized(physical_size) => {
-                            state.resize(*physical_size);
+                            renderer.resize(*physical_size);
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            state.resize(**new_inner_size);
+                            renderer.resize(**new_inner_size);
                         }
                         _ => {}
                     }
                 }
             }
             Event::RedrawRequested(_) => {
-                state.update();
-                match state.render() {
+                renderer.update();
+                match renderer.render() {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => state.resize(state.size()),
+                    Err(wgpu::SwapChainError::Lost) => renderer.resize(renderer.size()),
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame

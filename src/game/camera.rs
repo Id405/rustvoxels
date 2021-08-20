@@ -1,3 +1,3 @@
 pub struct Camera {
-    fov: f32,
+    pub fov: f32,
 }

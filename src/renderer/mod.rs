@@ -53,7 +53,7 @@ const VERTICES: &[Vertex] = &[
     },
 ];
 
-pub struct Renderer {
+pub struct Renderer<'a> {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -62,11 +62,12 @@ pub struct Renderer {
     size: winit::dpi::PhysicalSize<u32>,
     vertex_buffer: wgpu::Buffer,
     raytracer: raytracer::Raytracer,
+    world: &'a game::World
 }
 
 impl Renderer {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: &winit::window::Window) -> Self {
+    pub async fn new(window: &winit::window::Window, world: Game::World) -> Self {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -120,6 +121,7 @@ impl Renderer {
             size,
             vertex_buffer,
             raytracer,
+            world,
         }
     }
 
@@ -178,6 +180,8 @@ impl Renderer {
 
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
+
+        self.raytracer.frame_complete();
 
         Ok(())
     }
