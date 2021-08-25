@@ -1,5 +1,5 @@
-mod world;
 mod voxel_grid;
+mod collector;
 
 pub use voxel_grid::VoxelGrid;
 

@@ -1,3 +1,5 @@
+use crate::game::World;
+
 use self::uniforms::Uniforms;
 use wgpu::util::DeviceExt;
 
@@ -8,12 +10,12 @@ mod uniforms;
 pub struct RenderState {
     // This type should go away and become part of the resources type
     size: winit::dpi::PhysicalSize<u32>,
-    frame_count: u32
+    frame_count: u32,
 }
 
 impl RenderState {
-    pub fn size() -> winit::dpi::PhysicalSize<u32> {
-        size
+    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+        self.size
     }
 }
 
@@ -30,6 +32,7 @@ impl Raytracer {
         window: &winit::window::Window,
         device: &wgpu::Device,
         sc_desc: &wgpu::SwapChainDescriptor,
+        world: &World,
     ) -> Self {
         let size = window.inner_size();
 
@@ -47,7 +50,7 @@ impl Raytracer {
             source: shader_bundle.fragment,
         });
 
-        let uniforms = Uniforms::new(&self.render_state);
+        let uniforms = Uniforms::new(world);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Raytracing Uniforms"),
@@ -120,7 +123,10 @@ impl Raytracer {
             },
         });
 
-        let state = RenderState { size, frame_count: 0 };
+        let state = RenderState {
+            size,
+            frame_count: 0,
+        };
 
         Self {
             render_pipeline,
@@ -135,8 +141,8 @@ impl Raytracer {
         &self.render_pipeline
     }
 
-    pub fn update_uniform_data(&mut self, queue: &wgpu::Queue) {
-        self.uniforms.update(&self.render_state);
+    pub fn update_uniform_data(&mut self, queue: &wgpu::Queue, world: &World) {
+        self.uniforms.update(world, &self.render_state);
         queue.write_buffer(
             &self.uniform_buffer,
             0,

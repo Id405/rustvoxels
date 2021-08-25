@@ -1,36 +1,43 @@
-use cgmath::prelude::*;
+use cgmath::{Basis3, Matrix4, Vector3};
 
 pub struct Transform {
     position: Vector3<f32>,
-    rotation: Rotation3<f32>,
+    rotation: Basis3<f32>,
 }
 
-impl transform {
-    pub fn as_matrix(&self) -> Matrix4 {
+impl Transform {
+    pub fn as_matrix(&self) -> Matrix4<f32> {
         todo!()
     }
 
-    pub fn position(&self) -> Vector3 {
-        self.position;
+    pub fn position(&self) -> Vector3<f32> {
+        self.position
     }
 
-    pub fn rotation(&self) -> Rotation3<f32> {
-        self.rotation;
+    pub fn rotation(&self) -> Basis3<f32> {
+        self.rotation
     }
 
-    pub fn set_position(&mut self, position: Vector3) {
+    pub fn set_position(&mut self, position: Vector3<f32>) {
         self.position = position;
     }
 
-    pub fn set_rotation(&mut self, rotation: Rotation3) {
+    pub fn set_rotation(&mut self, rotation: Basis3<f32>) {
         self.rotation = rotation;
     }
 
-    pub fn add_position(&mut self, position: Vector3) {
+    pub fn add_position(&mut self, position: Vector3<f32>) {
         self.position += position;
     }
 
-    pub fn add_rotation(&mut self, rotation: Rotation3) {
-        self.rotation += rotation;
+    pub fn add_rotation(&mut self, rotation: Basis3<f32>) {
+        todo!();
+    }
+
+    pub fn new(position: Vector3<f32>, rotation: Basis3<f32>) -> Self {
+        Self {
+            position,
+            rotation,
+        }
     }
 }

@@ -1,13 +1,14 @@
-use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
+    window::Fullscreen,
     window::WindowBuilder,
-    window::{Fullscreen, Window},
 };
 
-mod renderer;
+use crate::game::World;
+
 mod game;
+mod renderer;
 
 fn main() {
     env_logger::init();
@@ -19,7 +20,7 @@ fn main() {
 
     window.set_fullscreen(Some(Fullscreen::Borderless(None)));
 
-    let mut world = game::World::default();
+    let mut world: World = game::World::default();
 
     let mut renderer = futures::executor::block_on(renderer::Renderer::new(&window, &world));
 
@@ -53,7 +54,7 @@ fn main() {
             }
             Event::RedrawRequested(_) => {
                 renderer.update();
-                match renderer.render() {
+                match renderer.render(&world) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
                     Err(wgpu::SwapChainError::Lost) => renderer.resize(renderer.size()),

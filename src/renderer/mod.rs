@@ -1,6 +1,8 @@
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
+use crate::game::World;
+
 mod glsl_loader;
 mod raytracer;
 
@@ -53,7 +55,7 @@ const VERTICES: &[Vertex] = &[
     },
 ];
 
-pub struct Renderer<'a> {
+pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -62,12 +64,11 @@ pub struct Renderer<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     vertex_buffer: wgpu::Buffer,
     raytracer: raytracer::Raytracer,
-    world: &'a game::World
 }
 
 impl Renderer {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: &winit::window::Window, world: Game::World) -> Self {
+    pub async fn new(window: &winit::window::Window, world: &World) -> Renderer {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -104,7 +105,7 @@ impl Renderer {
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let raytracer = raytracer::Raytracer::new(window, &device, &sc_desc); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+        let raytracer = raytracer::Raytracer::new(window, &device, &sc_desc, &world); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -121,7 +122,6 @@ impl Renderer {
             size,
             vertex_buffer,
             raytracer,
-            world,
         }
     }
 
@@ -142,7 +142,7 @@ impl Renderer {
         // remove `todo!()`
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(&mut self, world: &World) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
 
         let mut encoder = self
@@ -150,8 +150,8 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-        
-        self.raytracer.update_uniform_data(&self.queue); // uniform data must be kept up to date before rendering is performed
+
+        self.raytracer.update_uniform_data(&self.queue, world); // uniform data must be kept up to date before rendering is performed
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

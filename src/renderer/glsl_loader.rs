@@ -11,12 +11,10 @@ impl ShaderUnwrap for Result<CompilationArtifact> {
     fn shader_unwrap(self) -> CompilationArtifact {
         match self {
             Ok(value) => value,
-            Err(error) => {
-                match error {
-                    Error::CompilationError(error_code, error_text) => panic!("{}", error_text),
-                    error => panic!("{}", error),
-                }
-            }
+            Err(error) => match error {
+                Error::CompilationError(error_code, error_text) => panic!("{}", error_text),
+                error => panic!("{}", error),
+            },
         }
     }
 }
