@@ -1,11 +1,13 @@
+use game::world::Collector;
+use game::world::CollectorReferences;
+use game::GameLogic;
+use game::World;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::Fullscreen,
     window::WindowBuilder,
 };
-
-use crate::game::World;
 
 mod game;
 mod renderer;
@@ -20,7 +22,12 @@ fn main() {
 
     window.set_fullscreen(Some(Fullscreen::Borderless(None)));
 
-    let mut world: World = game::World::default();
+    let mut world: World = World::default();
+
+    let mut game_logic = GameLogic::new(&mut world.player);
+    Collector::collect(CollectorReferences {
+        voxel_grid: &mut world.voxel_grid,
+    });
 
     let mut renderer = futures::executor::block_on(renderer::Renderer::new(&window, &world));
 

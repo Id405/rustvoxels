@@ -11,14 +11,17 @@ pub struct VoxelGrid {
 
 impl VoxelGrid {
     pub fn from_string(text_data: String) -> VoxelGrid {
-        let mut lines = text_data.split("\n");
+        let mut lines = text_data.split("\n").map( |x| x.replace("\r", ""));
 
         let mut dimensions = lines
             .next()
-            .expect("failed to parse scene: unexpected EOF")
+            .expect("failed to parse scene: unexpected EOF");
+        
+        let mut dimensions = dimensions
             .split("x")
             .map(|x| {
-                x.parse::<usize>()
+                x.trim()
+                    .parse::<usize>()
                     .expect("failed to parse scene: expected int in dimension data got str")
             });
 

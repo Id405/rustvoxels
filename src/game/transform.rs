@@ -7,7 +7,7 @@ pub struct Transform {
 
 impl Transform {
     pub fn as_matrix(&self) -> Matrix4<f32> {
-        todo!()
+        Matrix4::from_translation(self.position)
     }
 
     pub fn position(&self) -> Vector3<f32> {
@@ -35,9 +35,6 @@ impl Transform {
     }
 
     pub fn new(position: Vector3<f32>, rotation: Basis3<f32>) -> Self {
-        Self {
-            position,
-            rotation,
-        }
+        Self { position, rotation }
     }
 }
