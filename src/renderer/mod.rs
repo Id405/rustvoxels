@@ -55,22 +55,17 @@ const VERTICES: &[Vertex] = &[
     },
 ];
 
-pub struct Renderer {
+pub struct RenderContext<'a> {
+    window: &'a winit::window::Window,
+    instance: wgpu::Instance,
     surface: wgpu::Surface,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    sc_desc: wgpu::SwapChainDescriptor,
-    swap_chain: wgpu::SwapChain,
-    size: winit::dpi::PhysicalSize<u32>,
-    vertex_buffer: wgpu::Buffer,
-    raytracer: raytracer::Raytracer,
 }
 
-impl Renderer {
-    // Creating some of the wgpu types requires async code
-    pub async fn new(window: &winit::window::Window, world: &World) -> Renderer {
-        let size = window.inner_size();
-
+impl<'a> RenderContext<'a> {
+    pub async fn new(window: &winit::window::Window) -> RenderContext<'a> {
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
@@ -95,28 +90,60 @@ impl Renderer {
             .await
             .unwrap();
 
+        Self {
+            window,
+            instance,
+            surface,
+            adapter,
+            device,
+            queue,
+        }
+    }
+}
+
+pub struct Renderer {
+    sc_desc: wgpu::SwapChainDescriptor,
+    swap_chain: wgpu::SwapChain,
+    size: winit::dpi::PhysicalSize<u32>,
+    vertex_buffer: wgpu::Buffer,
+    raytracer: raytracer::Raytracer,
+}
+
+impl Renderer {
+    // Creating some of the wgpu types requires async code
+    pub async fn new(context: &RenderContext, world: &World) -> Renderer {
+        let size = context.window.inner_size();
+
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: adapter.get_swap_chain_preferred_format(&surface).unwrap(),
+            format: context
+                .adapter
+                .get_swap_chain_preferred_format(&context.surface)
+                .unwrap(),
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
         };
 
-        let swap_chain = device.create_swap_chain(&surface, &sc_desc);
+        let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
 
-        let raytracer = raytracer::Raytracer::new(window, &device, &sc_desc, &world); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+        let raytracer = raytracer::Raytracer::new(
+            &context.window,
+            &context.queue,
+            &context.device,
+            &sc_desc,
+            &world,
+        ); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsage::VERTEX,
-        });
+        let vertex_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsage::VERTEX,
+            });
 
         Self {
-            surface,
-            device,
-            queue,
             sc_desc,
             swap_chain,
             size,
@@ -125,11 +152,13 @@ impl Renderer {
         }
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, context: &RenderContext, new_size: winit::dpi::PhysicalSize<u32>) {
         self.size = new_size;
         self.sc_desc.width = new_size.width;
         self.sc_desc.height = new_size.height;
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
+        self.swap_chain = context
+            .device
+            .create_swap_chain(&context.surface, &self.sc_desc);
 
         self.raytracer.resize(new_size);
     }
@@ -142,16 +171,20 @@ impl Renderer {
         // remove `todo!()`
     }
 
-    pub fn render(&mut self, world: &World) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(
+        &mut self,
+        context: RenderContext,
+        world: &World,
+    ) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
 
-        let mut encoder = self
+        let mut encoder = context
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
 
-        self.raytracer.update_uniform_data(&self.queue, world); // uniform data must be kept up to date before rendering is performed
+        self.raytracer.update_uniform_data(&context.queue, world); // uniform data must be kept up to date before rendering is performed
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -179,7 +212,7 @@ impl Renderer {
         }
 
         // submit will accept anything that implements IntoIter
-        self.queue.submit(std::iter::once(encoder.finish()));
+        context.queue.submit(std::iter::once(encoder.finish()));
 
         self.raytracer.frame_complete();
 

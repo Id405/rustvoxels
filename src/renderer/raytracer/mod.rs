@@ -8,7 +8,6 @@ use super::{glsl_loader, Vertex};
 mod uniforms;
 
 pub struct RenderState {
-    // This type should go away and become part of the resources type
     size: winit::dpi::PhysicalSize<u32>,
     frame_count: u32,
 }
@@ -24,12 +23,14 @@ pub struct Raytracer {
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    world_bind_group: wgpu::BindGroup,
     render_state: RenderState,
 }
 
 impl Raytracer {
     pub fn new(
         window: &winit::window::Window,
+        queue: &wgpu::Queue,
         device: &wgpu::Device,
         sc_desc: &wgpu::SwapChainDescriptor,
         world: &World,
@@ -82,10 +83,74 @@ impl Raytracer {
             label: Some("uniform_bind_group"),
         });
 
+        let world = world.voxel_grid.as_ref().expect("ERROR: expected resource not present");
+        world.gen_texture(device, queue);
+
+        let world_texture = world.as_texture();
+
+        let world_texture_view = world_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let world_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let texture_bind_group_layout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D3,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler {
+                            // This is only for TextureSampleType::Depth
+                            comparison: false,
+                            // This should be true if the sample_type of the texture is:
+                            //     TextureSampleType::Float { filterable: true }
+                            // Otherwise you'll get an error.
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            }
+        );
+
+        let world_bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&world_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&world_sampler),
+                    }
+                ],
+                label: Some("world_bind_group"),
+            }
+        );        
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&uniform_bind_group_layout],
+                bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -134,6 +199,7 @@ impl Raytracer {
             uniform_buffer,
             uniform_bind_group,
             render_state: state,
+            world_bind_group,
         }
     }
 
@@ -152,6 +218,10 @@ impl Raytracer {
 
     pub fn uniform_bind_group(&self) -> &wgpu::BindGroup {
         &self.uniform_bind_group
+    }
+
+    pub fn world_bind_group(&self) -> &wgpu::BindGroup {
+        &self.world_bind_group
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

@@ -5,8 +5,6 @@ use game::World;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::Fullscreen,
-    window::WindowBuilder,
 };
 
 mod game;
@@ -15,12 +13,13 @@ mod renderer;
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_title("megavoxels")
+
+    let window = winit::window::WindowBuilder::new()
+        .with_title("rustvoxels")
         .build(&event_loop)
         .unwrap();
 
-    window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+    window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
 
     let mut world: World = World::default();
 

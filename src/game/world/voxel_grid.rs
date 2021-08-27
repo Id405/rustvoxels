@@ -133,7 +133,7 @@ impl VoxelGrid {
         self.texture.as_ref().unwrap()
     }
 
-    fn write_texture_data(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn write_texture_data(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
         // Thinking out loud, device and queue should public resources
         let texture = match &self.texture {
             Some(texture) => texture,
