@@ -1,5 +1,5 @@
 [package]
-name = "bevywgpu"
+name = "rustvoxels"
 version = "0.1.0"
 authors = ["Id405 <8o7wermobile@gmail.com>"]
 edition = "2018"

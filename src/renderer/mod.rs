@@ -1,5 +1,5 @@
 use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
+use winit::{dpi::PhysicalSize, window};
 
 use crate::game::World;
 
@@ -55,21 +55,26 @@ const VERTICES: &[Vertex] = &[
     },
 ];
 
-pub struct RenderContext<'a> {
-    window: &'a winit::window::Window,
-    instance: wgpu::Instance,
-    surface: wgpu::Surface,
-    adapter: wgpu::Adapter,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+pub struct RenderContext {
+    pub window: winit::window::Window,
+    pub instance: wgpu::Instance,
+    pub surface: wgpu::Surface,
+    pub adapter: wgpu::Adapter,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
 }
 
-impl<'a> RenderContext<'a> {
-    pub async fn new(window: &winit::window::Window) -> RenderContext<'a> {
-        // The instance is a handle to our GPU
-        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
+impl RenderContext {
+    pub async fn new(event_loop: &winit::event_loop::EventLoop<()>) -> RenderContext {
+        let window = winit::window::WindowBuilder::new()
+            .with_title("rustvoxels")
+            .build(&event_loop)
+            .unwrap();
+
+        window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
-        let surface = unsafe { instance.create_surface(window) };
+        let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -127,13 +132,7 @@ impl Renderer {
 
         let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
 
-        let raytracer = raytracer::Raytracer::new(
-            &context.window,
-            &context.queue,
-            &context.device,
-            &sc_desc,
-            &world,
-        ); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+        let raytracer = raytracer::Raytracer::new(context, &sc_desc, &world); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
         let vertex_buffer = context
             .device
@@ -173,7 +172,7 @@ impl Renderer {
 
     pub fn render(
         &mut self,
-        context: RenderContext,
+        context: &RenderContext,
         world: &World,
     ) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
@@ -184,7 +183,7 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
-        self.raytracer.update_uniform_data(&context.queue, world); // uniform data must be kept up to date before rendering is performed
+        self.raytracer.update_uniform_data(&context, world); // uniform data must be kept up to date before rendering is performed
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

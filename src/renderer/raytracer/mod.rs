@@ -3,7 +3,7 @@ use crate::game::World;
 use self::uniforms::Uniforms;
 use wgpu::util::DeviceExt;
 
-use super::{glsl_loader, Vertex};
+use super::{glsl_loader, RenderContext, Vertex};
 
 mod uniforms;
 
@@ -29,67 +29,77 @@ pub struct Raytracer {
 
 impl Raytracer {
     pub fn new(
-        window: &winit::window::Window,
-        queue: &wgpu::Queue,
-        device: &wgpu::Device,
+        context: &RenderContext,
         sc_desc: &wgpu::SwapChainDescriptor,
         world: &World,
     ) -> Self {
-        let size = window.inner_size();
+        let size = context.window.inner_size();
 
         let shader_bundle = glsl_loader::ShaderBundle::from_path("raytrace"); // todo: live reloading
 
-        let shader_vertex = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            flags: wgpu::ShaderFlags::all(),
-            source: shader_bundle.vertex,
-        });
+        let shader_vertex = context
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                flags: wgpu::ShaderFlags::all(),
+                source: shader_bundle.vertex,
+            });
 
-        let shader_fragment = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            flags: wgpu::ShaderFlags::all(),
-            source: shader_bundle.fragment,
-        });
+        let shader_fragment = context
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                flags: wgpu::ShaderFlags::all(),
+                source: shader_bundle.fragment,
+            });
 
         let uniforms = Uniforms::new(world);
 
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Raytracing Uniforms"),
-            contents: bytemuck::cast_slice(&[uniforms]),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-        });
-
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("uniform_bind_group_layout"),
+        let uniform_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Raytracing Uniforms"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             });
 
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: Some("uniform_bind_group"),
-        });
+        let uniform_bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                    label: Some("uniform_bind_group_layout"),
+                });
 
-        let world = world.voxel_grid.as_ref().expect("ERROR: expected resource not present");
-        world.gen_texture(device, queue);
+        let uniform_bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &uniform_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                }],
+                label: Some("uniform_bind_group"),
+            });
+
+        let world = world
+            .voxel_grid
+            .as_ref()
+            .expect("ERROR: expected resource not present");
 
         let world_texture = world.as_texture();
 
         let world_texture_view = world_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let world_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let world_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -99,39 +109,41 @@ impl Raytracer {
             ..Default::default()
         });
 
-        let texture_bind_group_layout = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D3,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+        let texture_bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D3,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
                         },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            // This is only for TextureSampleType::Depth
-                            comparison: false,
-                            // This should be true if the sample_type of the texture is:
-                            //     TextureSampleType::Float { filterable: true }
-                            // Otherwise you'll get an error.
-                            filtering: true,
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                // This is only for TextureSampleType::Depth
+                                comparison: false,
+                                // This should be true if the sample_type of the texture is:
+                                //     TextureSampleType::Float { filterable: true }
+                                // Otherwise you'll get an error.
+                                filtering: true,
+                            },
+                            count: None,
                         },
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            }
-        );
+                    ],
+                    label: Some("texture_bind_group_layout"),
+                });
 
-        let world_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
+        let world_bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -141,52 +153,56 @@ impl Raytracer {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&world_sampler),
-                    }
+                    },
                 ],
                 label: Some("world_bind_group"),
-            }
-        );        
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
-                push_constant_ranges: &[],
             });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                buffers: &[Vertex::desc()],
-                module: &shader_vertex,
-                entry_point: "main",
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader_fragment,
-                entry_point: "main",
-                targets: &[wgpu::ColorTargetState {
-                    format: sc_desc.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                clamp_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-        });
+        let render_pipeline_layout =
+            context
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
+
+        let render_pipeline =
+            context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Render Pipeline"),
+                    layout: Some(&render_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        buffers: &[Vertex::desc()],
+                        module: &shader_vertex,
+                        entry_point: "main",
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader_fragment,
+                        entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: sc_desc.format,
+                            blend: Some(wgpu::BlendState::REPLACE),
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: None,
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        clamp_depth: false,
+                        conservative: false,
+                    },
+                    depth_stencil: None,
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
+                    },
+                });
 
         let state = RenderState {
             size,
@@ -207,9 +223,9 @@ impl Raytracer {
         &self.render_pipeline
     }
 
-    pub fn update_uniform_data(&mut self, queue: &wgpu::Queue, world: &World) {
+    pub fn update_uniform_data(&mut self, context: &RenderContext, world: &World) {
         self.uniforms.update(world, &self.render_state);
-        queue.write_buffer(
+        context.queue.write_buffer(
             &self.uniform_buffer,
             0,
             bytemuck::cast_slice(&[self.uniforms]),

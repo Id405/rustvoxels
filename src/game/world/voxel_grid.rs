@@ -1,5 +1,7 @@
 use std::convert::TryInto;
 
+use crate::renderer::RenderContext;
+
 pub struct VoxelGrid {
     width: usize,
     height: usize,
@@ -11,19 +13,15 @@ pub struct VoxelGrid {
 
 impl VoxelGrid {
     pub fn from_string(text_data: String) -> VoxelGrid {
-        let mut lines = text_data.split("\n").map( |x| x.replace("\r", ""));
+        let mut lines = text_data.split("\n").map(|x| x.replace("\r", ""));
 
-        let mut dimensions = lines
-            .next()
-            .expect("failed to parse scene: unexpected EOF");
-        
-        let mut dimensions = dimensions
-            .split("x")
-            .map(|x| {
-                x.trim()
-                    .parse::<usize>()
-                    .expect("failed to parse scene: expected int in dimension data got str")
-            });
+        let mut dimensions = lines.next().expect("failed to parse scene: unexpected EOF");
+
+        let mut dimensions = dimensions.split("x").map(|x| {
+            x.trim()
+                .parse::<usize>()
+                .expect("failed to parse scene: expected int in dimension data got str")
+        });
 
         let width = dimensions
             .next()
@@ -85,15 +83,9 @@ impl VoxelGrid {
         });
     }
 
-    fn set_voxel(
-        &mut self,
-        pos: [usize; 3],
-        color: [u8; 4],
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) {
+    fn set_voxel(&mut self, pos: [usize; 3], color: [u8; 4], context: &RenderContext) {
         self.set_data(pos, color);
-        self.write_texture_data(device, queue);
+        self.write_texture_data(context);
     }
 
     pub fn width(&self) -> usize {
@@ -109,16 +101,16 @@ impl VoxelGrid {
         self.length
     }
 
-    pub fn gen_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn gen_texture(&mut self, context: &RenderContext) {
         self.texture_size = Some(wgpu::Extent3d {
             width: self.width as u32,
             height: self.length as u32,
             depth_or_array_layers: self.height as u32,
         });
 
-        self.texture = Some(device.create_texture(&wgpu::TextureDescriptor {
+        self.texture = Some(context.device.create_texture(&wgpu::TextureDescriptor {
             size: self.texture_size.unwrap(),
-            mip_level_count: 4, // (((self.width).min((self.height).min(self.length)) as f32).log2()).floor() as u32,
+            mip_level_count: self.get_mip_levels(),
             label: Some("scene_texture"),
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
@@ -126,24 +118,23 @@ impl VoxelGrid {
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         }));
 
-        self.write_texture_data(device, queue);
+        self.write_texture_data(context);
     }
 
     pub fn as_texture(&self) -> &wgpu::Texture {
         self.texture.as_ref().unwrap()
     }
 
-    pub fn write_texture_data(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        // Thinking out loud, device and queue should public resources
+    pub fn write_texture_data(&self, context: &RenderContext) {
         let texture = match &self.texture {
             Some(texture) => texture,
             None => return,
         };
 
-        queue.write_texture(
+        context.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: texture,
-                mip_level: 4, // use math to determine this once data is float
+                mip_level: self.get_mip_levels(),
                 origin: wgpu::Origin3d::ZERO,
             },
             &self.data,
@@ -154,5 +145,10 @@ impl VoxelGrid {
             },
             self.texture_size.unwrap(),
         )
+    }
+
+    pub fn get_mip_levels(&self) -> u32 {
+        // (((self.width).min((self.height).min(self.length)) as f32).log2()).floor() as u32 // TODO once data is converted to floats use this
+        4
     }
 }

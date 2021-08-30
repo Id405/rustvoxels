@@ -78,19 +78,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
-name = "bevywgpu"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "cgmath",
- "env_logger",
- "futures",
- "shaderc",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1435,6 +1422,19 @@ checksum = "dc7c727aded0be18c5b80c1640eae0ac8e396abf6fa8477d96cb37d18ee5ec59"
 dependencies = [
  "ab_glyph_rasterizer",
  "owned_ttf_parser",
+]
+
+[[package]]
+name = "rustvoxels"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "cgmath",
+ "env_logger",
+ "futures",
+ "shaderc",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
