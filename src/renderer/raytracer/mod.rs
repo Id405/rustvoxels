@@ -35,25 +35,40 @@ impl Raytracer {
     ) -> Self {
         let size = context.window.inner_size();
 
+        let state = RenderState {
+            size,
+            frame_count: 0,
+        };
+
         let shader_bundle = glsl_loader::ShaderBundle::from_path("raytrace"); // todo: live reloading
 
         let shader_vertex = context
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
+                label: Some("raytrace_vertex"),
                 flags: wgpu::ShaderFlags::all(),
                 source: shader_bundle.vertex,
             });
 
+        // let shader_fragment = context
+        //     .device
+        //     .create_shader_module(&wgpu::ShaderModuleDescriptor {
+        //         label: Some("raytrace_fragment"),
+        //         flags: wgpu::ShaderFlags::all(),
+        //         source: shader_bundle.fragment,
+        //     });
+        
+        unsafe {
         let shader_fragment = context
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
+            .create_shader_module_spirv(&wgpu::ShaderModuleDescriptor {
+                label: Some("raytrace_fragment"),
                 flags: wgpu::ShaderFlags::all(),
                 source: shader_bundle.fragment,
             });
+        }
 
-        let uniforms = Uniforms::new(world);
+        let uniforms = Uniforms::new(world, &state);
 
         let uniform_buffer = context
             .device
@@ -203,11 +218,6 @@ impl Raytracer {
                         alpha_to_coverage_enabled: false,
                     },
                 });
-
-        let state = RenderState {
-            size,
-            frame_count: 0,
-        };
 
         Self {
             render_pipeline,

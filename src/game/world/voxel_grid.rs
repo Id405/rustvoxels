@@ -15,7 +15,7 @@ impl VoxelGrid {
     pub fn from_string(text_data: String) -> VoxelGrid {
         let mut lines = text_data.split("\n").map(|x| x.replace("\r", ""));
 
-        let mut dimensions = lines.next().expect("failed to parse scene: unexpected EOF");
+        let dimensions = lines.next().expect("failed to parse scene: unexpected EOF");
 
         let mut dimensions = dimensions.split("x").map(|x| {
             x.trim()
@@ -114,7 +114,7 @@ impl VoxelGrid {
             label: Some("scene_texture"),
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb, //TODO convert data to float
+            format: wgpu::TextureFormat::Rgba8Uint, //TODO convert data to float
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         }));
 
@@ -134,7 +134,7 @@ impl VoxelGrid {
         context.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: texture,
-                mip_level: self.get_mip_levels(),
+                mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             &self.data,
@@ -149,6 +149,6 @@ impl VoxelGrid {
 
     pub fn get_mip_levels(&self) -> u32 {
         // (((self.width).min((self.height).min(self.length)) as f32).log2()).floor() as u32 // TODO once data is converted to floats use this
-        4
+        1
     }
 }

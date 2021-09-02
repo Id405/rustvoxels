@@ -8,16 +8,14 @@ layout(location = 0) out vec4 outColor;
 layout(set = 0, binding = 0) uniform texture3D scene_texture;
 
 layout(set = 1, binding = 0) uniform Raytrace {
-    uniform ivec2 iResolution; 
+    uniform ivec2 resolution; 
     uniform int samples;
-    uniform int maxSteps;
-    uniform int frameCount;
-
-    uniform mat4 cameraMatrix; //TODO put this into its on binding group
-    uniform float focalLength;
-
-    uniform ivec3 sceneSize;
-    uniform int octreeDepth;
+    uniform float focal_length;
+    uniform int frame_count;
+	uniform mat4 world_matrix; //TODO put this into its on binding group
+    uniform ivec3 scene_size;
+    uniform int max_steps;
+    uniform int octree_depth;
 };
 
 #define SKYCOLOR vec3(0.9) 
@@ -107,30 +105,30 @@ bool getVoxel(ivec3 c, int l) {
 
 // Get the color of the voxel at a given position and mipmap level
 vec3 getColor(ivec3 c, int l) {
-	return texelFetch(scene_texture, clamp(c, ivec3(0), sceneSize), l).rgb;
+	return texelFetch(scene_texture, clamp(c, ivec3(0), scene_size), l).rgb;
 }
 
 // The main raytracing function, the alpha channel of the vec4 that is returned is the depth
 vec4 trace(vec2 p) {
 	// Setup the Ray Position and Direction given the camera transformation matrix
-	vec2 s = vec2(p.x - float(iResolution.x)/2.0f, p.y - float(iResolution.y)/2.0f);
-	vec3 raypos = (cameraMatrix * vec4(0, 0, 0, 1)).xyz;
-	vec3 raydir = normalize(vec3(s.x/iResolution.y, focalLength, s.y/iResolution.y));
-	raydir = (cameraMatrix * vec4(raydir, 0.0)).xyz;
+	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
+	vec3 raypos = (world_matrix * vec4(0, 0, 0, 1)).xyz;
+	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
+	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
 
 	// Variables needed for the bounding box function
 	vec3 n;
 	vec2 res;
 
-	if(!(insideBoundingBox(raypos, vec3(0), vec3(sceneSize)))) {
-		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(sceneSize), res, n)) {
+	if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
+		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
 			raypos += raydir * res.x + n * 0.00001;
 		} else {
 			return vec4((SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER) * SUNLIGHTSTRENGTH, 10000000);
 		} //TODO normal data is not needed
 	}
 
-	int maxLevel = octreeDepth-1;
+	int maxLevel = octree_depth-1;
 	int level = maxLevel/2; // The current level in the octree
 
 	float complexity = 0; // Used to display a complexity map, however not required for the actual rendering
@@ -154,8 +152,8 @@ vec4 trace(vec2 p) {
 	vec3 outColor = vec3(1);
 	float depth = 0;
 
-	for(int i=0; i<maxSteps; i++) { // Begin marching the ray now
-		if(!insideBoundingBox(gridPosition, vec3(-2), sceneSize + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
+	for(int i=0; i<max_steps; i++) { // Begin marching the ray now
+		if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
 			break;
 		}
 
@@ -226,23 +224,23 @@ vec4 trace(vec2 p) {
 		depth = 10000000;
 	}
 
-	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
-	// return vec4(vec3(float(steps)/maxSteps), 1.0); // Return how many steps it took to render this pixel
+	// return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
 	// return vec4(outColor, 1); // Return scene lit only using anti-aliasing
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
+	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
 }
 
 void mainImage(in vec2 fragCoord )
 {
 	// Initialize global seed for RNG
-	g_seed = float(base_hash(floatBitsToUint(fragCoord + float(frameCount)/240)))/float(0xffffffffU);
+	g_seed = float(base_hash(floatBitsToUint(fragCoord + float(frame_count)/240)))/float(0xffffffffU);
 
 	// Render the scenes samples
 	for(int i=0; i < samples; i++) {
 		vec2 p = fragCoord;
 		// p += 0.25 * (rand2(g_seed) * 2 - 1); // Jitter primary ray by a small random amount for anti aliasing
-		p.y = iResolution.y - p.y; // Flip image vertically because ofFbo flips images vertically for some reason
+		p.y = resolution.y - p.y; // Flip image vertically because ofFbo flips images vertically for some reason
 		vec4 col = trace(p);
 
 		outColor += vec4(col.rgb, 1.0); // Accumulate color average
@@ -250,7 +248,7 @@ void mainImage(in vec2 fragCoord )
 	}
 
 	outColor /= float(samples); // Average color
-	gl_FragDepth /= float(samples); // Average depth
+	// gl_FragDepth /= float(samples); // Average depth
 	//outNormal = vec4(1.0, 0.0, 0.0, 1.0);
 }
 

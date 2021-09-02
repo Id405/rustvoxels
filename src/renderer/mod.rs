@@ -162,7 +162,8 @@ impl Renderer {
         self.raytracer.resize(new_size);
     }
 
-    pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool { // This function should only be used for accepting debug commands for the renderer
+    pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
+        // This function should only be used for accepting debug commands for the renderer
         false
     }
 
