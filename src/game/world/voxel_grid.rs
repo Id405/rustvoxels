@@ -115,7 +115,7 @@ impl VoxelGrid {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba8Uint, //TODO convert data to float
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         }));
 
         self.write_texture_data(context);
@@ -136,6 +136,7 @@ impl VoxelGrid {
                 texture: texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: (),
             },
             &self.data,
             wgpu::ImageDataLayout {

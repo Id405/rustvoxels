@@ -8,14 +8,14 @@ layout(location = 0) out vec4 outColor;
 layout(set = 0, binding = 0) uniform texture3D scene_texture;
 
 layout(set = 1, binding = 0) uniform Raytrace {
-    uniform ivec2 resolution; 
-    uniform int samples;
-    uniform float focal_length;
-    uniform int frame_count;
-	uniform mat4 world_matrix; //TODO put this into its on binding group
-    uniform ivec3 scene_size;
-    uniform int max_steps;
-    uniform int octree_depth;
+    ivec2 resolution; 
+    int samples;
+    float focal_length;
+    int frame_count;
+	mat4 world_matrix; //TODO put this into its on binding group
+    ivec3 scene_size;
+    int max_steps;
+    int octree_depth;
 };
 
 #define SKYCOLOR vec3(0.9) 
@@ -43,7 +43,7 @@ uint base_hash3(uvec3 p) {
     return h32^(h32 >> 16);
 }
 
-float g_seed = 0.;
+float g_seed = 0.0;
 
 vec2 rand2(inout float seed) {
     uint n = base_hash(floatBitsToUint(vec2(seed+=1,seed+=1)));
@@ -64,7 +64,7 @@ vec3 rand3(vec3 seed) {
 }
 
 vec3 random_in_unit_sphere() {
-    vec3 h = rand3(g_seed) * vec3(2.,6.28318530718,1.)-vec3(1,0,0);
+    vec3 h = rand3(g_seed) * vec3(2.,6.28318530718,1.)-vec3(1.0,0.0,0.0);
     float phi = h.y;
     float r = pow(h.z, 1./3.);
 	return r * vec3(sqrt(1.-h.x*h.x)*vec2(sin(phi),cos(phi)),h.x);

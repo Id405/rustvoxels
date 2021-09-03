@@ -50,23 +50,13 @@ impl Raytracer {
                 source: shader_bundle.vertex,
             });
 
-        // let shader_fragment = context
-        //     .device
-        //     .create_shader_module(&wgpu::ShaderModuleDescriptor {
-        //         label: Some("raytrace_fragment"),
-        //         flags: wgpu::ShaderFlags::all(),
-        //         source: shader_bundle.fragment,
-        //     });
-        
-        unsafe {
         let shader_fragment = context
             .device
-            .create_shader_module_spirv(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("raytrace_fragment"),
                 flags: wgpu::ShaderFlags::all(),
                 source: shader_bundle.fragment,
             });
-        }
 
         let uniforms = Uniforms::new(world, &state);
 
