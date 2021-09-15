@@ -30,7 +30,7 @@ pub struct Raytracer {
 impl Raytracer {
     pub fn new(
         context: &RenderContext,
-        sc_desc: &wgpu::SwapChainDescriptor,
+        sc_desc: &wgpu::SurfaceConfiguration,
         world: &World,
     ) -> Self {
         let size = context.window.inner_size();
@@ -46,7 +46,6 @@ impl Raytracer {
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("raytrace_vertex"),
-                flags: wgpu::ShaderFlags::all(),
                 source: shader_bundle.vertex,
             });
 
@@ -54,7 +53,6 @@ impl Raytracer {
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("raytrace_fragment"),
-                flags: wgpu::ShaderFlags::all(),
                 source: shader_bundle.fragment,
             });
 
@@ -65,7 +63,7 @@ impl Raytracer {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Raytracing Uniforms"),
                 contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
         let uniform_bind_group_layout =
@@ -74,7 +72,7 @@ impl Raytracer {
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -121,7 +119,7 @@ impl Raytracer {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
                                 view_dimension: wgpu::TextureViewDimension::D3,
@@ -131,7 +129,7 @@ impl Raytracer {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 // This is only for TextureSampleType::Depth
                                 comparison: false,
@@ -189,7 +187,7 @@ impl Raytracer {
                         targets: &[wgpu::ColorTargetState {
                             format: sc_desc.format,
                             blend: Some(wgpu::BlendState::REPLACE),
-                            write_mask: wgpu::ColorWrite::ALL,
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {

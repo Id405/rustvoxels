@@ -17,7 +17,7 @@ impl Vertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
                     offset: 0,
@@ -73,7 +73,7 @@ impl RenderContext {
 
         window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
 
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -107,8 +107,7 @@ impl RenderContext {
 }
 
 pub struct Renderer {
-    sc_desc: wgpu::SwapChainDescriptor,
-    swap_chain: wgpu::SwapChain,
+    surface_config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     vertex_buffer: wgpu::Buffer,
     raytracer: raytracer::Raytracer,
@@ -119,32 +118,33 @@ impl Renderer {
     pub async fn new(context: &RenderContext, world: &World) -> Renderer {
         let size = context.window.inner_size();
 
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: context
-                .adapter
-                .get_swap_chain_preferred_format(&context.surface)
+                .surface
+                .get_preferred_format(&context.adapter)
                 .unwrap(),
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
         };
 
-        let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
+        context.surface.configure(&context.device, &surface_config);
 
-        let raytracer = raytracer::Raytracer::new(context, &sc_desc, &world); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+        // let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
+
+        let raytracer = raytracer::Raytracer::new(context, &surface_config, &world); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
         let vertex_buffer = context
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(VERTICES),
-                usage: wgpu::BufferUsage::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX,
             });
 
         Self {
-            sc_desc,
-            swap_chain,
+            surface_config,
             size,
             vertex_buffer,
             raytracer,
@@ -153,11 +153,9 @@ impl Renderer {
 
     pub fn resize(&mut self, context: &RenderContext, new_size: winit::dpi::PhysicalSize<u32>) {
         self.size = new_size;
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
-        self.swap_chain = context
-            .device
-            .create_swap_chain(&context.surface, &self.sc_desc);
+        self.surface_config.width = new_size.width;
+        self.surface_config.height = new_size.height;
+        context.surface.configure(&context.device, &self.surface_config);
 
         self.raytracer.resize(new_size);
     }
@@ -175,8 +173,8 @@ impl Renderer {
         &mut self,
         context: &RenderContext,
         world: &World,
-    ) -> Result<(), wgpu::SwapChainError> {
-        let frame = self.swap_chain.get_current_frame()?.output;
+    ) -> Result<(), wgpu::SurfaceError> {
+        let frame = context.surface.get_current_frame()?.output;
 
         let mut encoder = context
             .device
@@ -187,10 +185,12 @@ impl Renderer {
         self.raytracer.update_uniform_data(&context, world); // uniform data must be kept up to date before rendering is performed
 
         {
+            let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &frame.view,
+                    view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {

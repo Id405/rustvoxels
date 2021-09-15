@@ -136,7 +136,7 @@ impl VoxelGrid {
                 texture: texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
-                aspect: (),
+                aspect: wgpu::TextureAspect::All,
             },
             &self.data,
             wgpu::ImageDataLayout {

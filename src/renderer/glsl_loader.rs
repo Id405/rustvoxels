@@ -1,5 +1,5 @@
 use shaderc::*;
-use std::{borrow::Cow, fs::read_to_string}; // bad form
+use std::{borrow::Cow, fs::read_to_string, io::Write}; // bad form
 
 use wgpu::ShaderSource;
 
