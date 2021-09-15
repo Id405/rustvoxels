@@ -42,19 +42,24 @@ impl Raytracer {
 
         let shader_bundle = glsl_loader::ShaderBundle::from_path("raytrace"); // todo: live reloading
 
-        let shader_vertex = context
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("raytrace_vertex"),
-                source: shader_bundle.vertex,
-            });
+        let shader_vertex;
+        let shader_fragment;
+        
+        unsafe {
+            shader_vertex = context
+                .device
+                .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                    label: Some("raytrace_vertex"),
+                    source: shader_bundle.vertex,
+                });
 
-        let shader_fragment = context
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("raytrace_fragment"),
-                source: shader_bundle.fragment,
-            });
+            shader_fragment = context
+                .device
+                .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                    label: Some("raytrace_fragment"),
+                    source: shader_bundle.fragment,
+                });
+        }
 
         let uniforms = Uniforms::new(world, &state);
 
@@ -123,23 +128,23 @@ impl Raytracer {
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
                                 view_dimension: wgpu::TextureViewDimension::D3,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                sample_type: wgpu::TextureSampleType::Uint,
                             },
                             count: None,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                // This is only for TextureSampleType::Depth
-                                comparison: false,
-                                // This should be true if the sample_type of the texture is:
-                                //     TextureSampleType::Float { filterable: true }
-                                // Otherwise you'll get an error.
-                                filtering: true,
-                            },
-                            count: None,
-                        },
+                        // wgpu::BindGroupLayoutEntry {
+                        //     binding: 1,
+                        //     visibility: wgpu::ShaderStages::FRAGMENT,
+                        //     ty: wgpu::BindingType::Sampler {
+                        //         // This is only for TextureSampleType::Depth
+                        //         comparison: false,
+                        //         // This should be true if the sample_type of the texture is:
+                        //         //     TextureSampleType::Float { filterable: true }
+                        //         // Otherwise you'll get an error.
+                        //         filtering: true,
+                        //     },
+                        //     count: None,
+                        // },
                     ],
                     label: Some("texture_bind_group_layout"),
                 });

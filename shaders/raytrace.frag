@@ -236,6 +236,8 @@ void mainImage(in vec2 fragCoord )
 	// Initialize global seed for RNG
 	g_seed = float(base_hash(floatBitsToUint(fragCoord + float(frame_count)/240)))/float(0xffffffffU);
 
+	vec4 color = vec4(0.0);
+
 	// Render the scenes samples
 	for(int i=0; i < samples; i++) {
 		vec2 p = fragCoord;
@@ -243,15 +245,17 @@ void mainImage(in vec2 fragCoord )
 		p.y = resolution.y - p.y; // Flip image vertically because ofFbo flips images vertically for some reason
 		vec4 col = trace(p);
 
-		outColor += vec4(col.rgb, 1.0); // Accumulate color average
+		color += vec4(col.rgb, 1.0); // Accumulate color average
 		//gl_FragDepth += col.a/10000; // Accumulate depth average
 	}
 
-	outColor /= float(samples); // Average color
+	color /= float(samples); // Average color
+	outColor = color;
 	// gl_FragDepth /= float(samples); // Average depth
 	//outNormal = vec4(1.0, 0.0, 0.0, 1.0);
 }
 
 void main() {
 	mainImage(gl_FragCoord.xy);
+	// outColor = vec4(1.0, 0.0, 0.0, 1.0);
 }

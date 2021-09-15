@@ -20,8 +20,8 @@ impl ShaderUnwrap for Result<CompilationArtifact> {
 }
 
 pub struct ShaderBundle<'a> {
-    pub vertex: ShaderSource<'a>,
-    pub fragment: ShaderSource<'a>,
+    pub vertex: Cow<'a, [u32]>,
+    pub fragment: Cow<'a, [u32]>,
 }
 
 impl<'a> ShaderBundle<'a> {
@@ -64,8 +64,8 @@ impl<'a> ShaderBundle<'a> {
             .shader_unwrap();
 
         Self {
-            vertex: ShaderSource::SpirV(Cow::Owned(vertex.as_binary().to_owned())),
-            fragment: ShaderSource::SpirV(Cow::Owned(fragment.as_binary().to_owned())),
+            vertex: Cow::Owned(vertex.as_binary().to_owned()),
+            fragment: Cow::Owned(fragment.as_binary().to_owned()),
         }
     }
 }

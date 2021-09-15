@@ -86,7 +86,7 @@ impl RenderContext {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH,
                     limits: wgpu::Limits::default(),
                     label: None,
                 },
@@ -206,8 +206,8 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(self.raytracer.render_pipeline()); // TODO: rendering structs take control of their own swap chain and are interacted with through a RenderStruct trait
-            render_pass.set_bind_group(0, self.raytracer.world_bind_group(), &[]);
-            render_pass.set_bind_group(1, self.raytracer.uniform_bind_group(), &[]);
+            render_pass.set_bind_group(0, self.raytracer.uniform_bind_group(), &[]);
+            render_pass.set_bind_group(1, self.raytracer.world_bind_group(), &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.draw(0..VERTICES.len() as u32, 0..1);
         }
