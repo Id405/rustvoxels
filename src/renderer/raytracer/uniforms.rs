@@ -1,3 +1,5 @@
+use cgmath::Matrix;
+
 use super::RenderState;
 use crate::game::World;
 
@@ -34,11 +36,11 @@ impl Uniforms {
         self.resolution = [render_state.size.width, render_state.size.height];
         self.frame_count = render_state.frame_count;
         self.focal_length = player.camera.focal_length();
-        self.world_matrix = *player.transform.as_matrix().as_ref();
+        self.world_matrix = *player.transform.as_matrix().transpose().as_ref();
         self.scene_size = [
             voxel_grid.width() as u32,
-            voxel_grid.height() as u32,
             voxel_grid.length() as u32,
+            voxel_grid.height() as u32,
         ];
         self.octree_depth = voxel_grid.get_mip_levels();
         self.max_steps = 200; // TODO; config refactor

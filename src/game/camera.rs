@@ -4,6 +4,6 @@ pub struct Camera {
 
 impl Camera {
     pub fn focal_length(&self) -> f32 {
-        1.0 / f32::tan(self.fov / 2.0 * std::f32::consts::PI / 180.0)
+        0.5 * ((90.0 - self.fov / 2.0) * std::f32::consts::PI / 180.0).tan()
     }
 }

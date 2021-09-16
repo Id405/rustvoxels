@@ -128,7 +128,7 @@ impl Raytracer {
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
                                 view_dimension: wgpu::TextureViewDimension::D3,
-                                sample_type: wgpu::TextureSampleType::Uint,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false},
                             },
                             count: None,
                         },

@@ -5,9 +5,7 @@
 layout(location = 0) out vec4 outColor;
 // layout(location = 1) out vec4 outNormal;
 
-layout(set = 0, binding = 0) uniform texture3D scene_texture;
-
-layout(set = 1, binding = 0) uniform Raytrace {
+layout(set = 0, binding = 0) uniform Raytrace {
     ivec2 resolution; 
     int samples;
     float focal_length;
@@ -18,10 +16,13 @@ layout(set = 1, binding = 0) uniform Raytrace {
     int octree_depth;
 };
 
+layout(set = 1, binding = 0) uniform texture3D scene_texture;
+
+
 #define SKYCOLOR vec3(0.9) 
 #define SUNCOLOR vec3(192.0/255.0, 191.0/255.0, 173.0/255.0)
 #define LIGHTCOLOR vec3(5, 0, 0)
-#define LIGHTDIR vec3(0.0, 0.75, 1.0)
+#define LIGHTDIR vec3(0.0, 0.0, 1.0)
 #define SUNSHARPNESS 2
 #define SUNPOWER 4
 #define SKYPOWER 0.2
@@ -113,6 +114,7 @@ vec4 trace(vec2 p) {
 	// Setup the Ray Position and Direction given the camera transformation matrix
 	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
 	vec3 raypos = (world_matrix * vec4(0, 0, 0, 1)).xyz;
+	// vec3 raypos = vec3(0.1, 0.0, 0.1);
 	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
 	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
 
@@ -120,13 +122,14 @@ vec4 trace(vec2 p) {
 	vec3 n;
 	vec2 res;
 
-	if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
-		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
-			raypos += raydir * res.x + n * 0.00001;
-		} else {
-			return vec4((SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER) * SUNLIGHTSTRENGTH, 10000000);
-		} //TODO normal data is not needed
-	}
+	// if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
+	// 	if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
+	// 		raypos += raydir * res.x + n * 0.00001;
+	// 	} else {
+	// 		// return vec4((SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER) * SUNLIGHTSTRENGTH, 10000000);
+	// 		return vec4(1.0, 0.0, 0.0, 1.0);
+	// 	} //TODO normal data is not needed
+	// }
 
 	int maxLevel = octree_depth-1;
 	int level = maxLevel/2; // The current level in the octree
@@ -153,9 +156,9 @@ vec4 trace(vec2 p) {
 	float depth = 0;
 
 	for(int i=0; i<max_steps; i++) { // Begin marching the ray now
-		if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
-			break;
-		}
+		// if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
+		// 	break;
+		// }
 
 		bool nonEmpty = getVoxel(gridPosition >> level, level); // Is the current voxel empty
 		bool belowEmpty = !getVoxel(gridPosition >> (level + 1), level + 1) && level < maxLevel; // Can we move upwards an octree level?
@@ -224,11 +227,11 @@ vec4 trace(vec2 p) {
 		depth = 10000000;
 	}
 
-	// return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
+	return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
 	// return vec4(outColor, 1); // Return scene lit only using anti-aliasing
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
+	// return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
 }
 
 void mainImage(in vec2 fragCoord )
@@ -257,5 +260,4 @@ void mainImage(in vec2 fragCoord )
 
 void main() {
 	mainImage(gl_FragCoord.xy);
-	// outColor = vec4(1.0, 0.0, 0.0, 1.0);
 }

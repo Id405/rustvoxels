@@ -6,7 +6,7 @@ pub struct VoxelGrid {
     width: usize,
     height: usize,
     length: usize,
-    pub data: Vec<u8>,
+    pub data: Vec<f32>,
     texture: Option<wgpu::Texture>,
     texture_size: Option<wgpu::Extent3d>,
 }
@@ -37,7 +37,7 @@ impl VoxelGrid {
             width,
             height,
             length,
-            data: vec![0; width * height * length * 4],
+            data: vec![0.0; width * height * length * 4],
             texture: None,
             texture_size: None,
         };
@@ -79,7 +79,7 @@ impl VoxelGrid {
 
         let slice = &mut self.data[p..p + 4];
         slice.iter_mut().enumerate().for_each(|(i, v)| {
-            *v = color[i];
+            *v = (color[i] as f32)/255.0;
         });
     }
 
@@ -114,7 +114,7 @@ impl VoxelGrid {
             label: Some("scene_texture"),
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
-            format: wgpu::TextureFormat::Rgba8Uint, //TODO convert data to float
+            format: wgpu::TextureFormat::Rgba32Float, //TODO convert data to float
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         }));
 
@@ -131,21 +131,23 @@ impl VoxelGrid {
             None => return,
         };
 
-        context.queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &self.data,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * self.width as u32),
-                rows_per_image: std::num::NonZeroU32::new(self.length as u32),
-            },
-            self.texture_size.unwrap(),
-        )
+        unsafe { //TODO rework away unsafe
+            context.queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                std::slice::from_raw_parts(self.data.as_ptr() as *const u8, self.data.len() * 4),
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: std::num::NonZeroU32::new(16 * self.width as u32),
+                    rows_per_image: std::num::NonZeroU32::new(self.length as u32),
+                },
+                self.texture_size.unwrap(),
+            );
+        }
     }
 
     pub fn get_mip_levels(&self) -> u32 {
