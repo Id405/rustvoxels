@@ -113,23 +113,23 @@ vec3 getColor(ivec3 c, int l) {
 vec4 trace(vec2 p) {
 	// Setup the Ray Position and Direction given the camera transformation matrix
 	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
-	vec3 raypos = (world_matrix * vec4(0, 0, 0, 1)).xyz;
-	// vec3 raypos = vec3(0.1, 0.0, 0.1);
+	// vec3 raypos = vec3(world_matrix[0][3], world_matrix[1][3], world_matrix[2][3]);
+	vec3 raypos = vec3(0.1, 0.0, 10.0);
 	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
-	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
+	// raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
 
 	// Variables needed for the bounding box function
 	vec3 n;
 	vec2 res;
 
-	// if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
-	// 	if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
-	// 		raypos += raydir * res.x + n * 0.00001;
-	// 	} else {
-	// 		// return vec4((SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER) * SUNLIGHTSTRENGTH, 10000000);
-	// 		return vec4(1.0, 0.0, 0.0, 1.0);
-	// 	} //TODO normal data is not needed
-	// }
+	if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
+		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
+			raypos += raydir * res.x + n * 0.00001;
+		} else {
+			// return vec4((SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER) * SUNLIGHTSTRENGTH, 10000000);
+			return vec4(1.0, 0.0, 0.0, 1.0);
+		} //TODO normal data is not needed
+	}
 
 	int maxLevel = octree_depth-1;
 	int level = maxLevel/2; // The current level in the octree
@@ -155,7 +155,7 @@ vec4 trace(vec2 p) {
 	vec3 outColor = vec3(1);
 	float depth = 0;
 
-	for(int i=0; i<max_steps; i++) { // Begin marching the ray now
+	for(int i=0; i<200; i++) { // Begin marching the ray now
 		// if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
 		// 	break;
 		// }
@@ -227,11 +227,11 @@ vec4 trace(vec2 p) {
 		depth = 10000000;
 	}
 
-	return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
+	// return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
 	// return vec4(outColor, 1); // Return scene lit only using anti-aliasing
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	// return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
+	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
 }
 
 void mainImage(in vec2 fragCoord )
@@ -260,4 +260,5 @@ void mainImage(in vec2 fragCoord )
 
 void main() {
 	mainImage(gl_FragCoord.xy);
+	outColor = vec4(vec3(scene_size)/vec3(256.0, 64.0, 128.0), 1.0);
 }

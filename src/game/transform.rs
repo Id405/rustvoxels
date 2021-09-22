@@ -1,4 +1,4 @@
-use cgmath::{Basis3, Matrix4, Vector3};
+use cgmath::{Basis3, Matrix4, SquareMatrix, Vector3};
 
 pub struct Transform {
     position: Vector3<f32>,
