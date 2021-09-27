@@ -9,9 +9,9 @@ resolver="2"
 
 [dependencies]
 bytemuck = { version = "1.7", features = [ "derive" ] }
-cgmath = { version = "0.18.0", features = [ "mint" ] }
 env_logger = "0.8.4"
 futures = "0.3.15"
+glam = "0.17.3"
 naga = "0.6.3"
 shaderc = "0.7.2"
 wgpu = { version = "0.10", features = [ "spirv" ] }

@@ -1,4 +1,4 @@
-use cgmath::Matrix;
+use glam::{IVec2, IVec3, Mat4, Vec3};
 
 use super::RenderState;
 use crate::game::World;
@@ -6,9 +6,8 @@ use crate::game::World;
 #[repr(C, align(16))]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Uniforms {
-    world_matrix: [f32; 16],
-    scene_size: [i32; 3],
-    resolution: [i32; 2],
+    scene_size: IVec3,
+    resolution: IVec2,
     samples: i32,
     frame_count: i32,
     max_steps: i32,
@@ -36,15 +35,17 @@ impl Uniforms {
             .as_ref()
             .expect("ERROR: expected resource not present");
 
-        self.resolution = [render_state.size.width as i32, render_state.size.height as i32];
+        self.resolution = IVec2::new(
+            render_state.size.width as i32,
+            render_state.size.height as i32,
+        );
         self.frame_count = render_state.frame_count as i32;
         self.focal_length = player.camera.focal_length();
-        self.world_matrix = *player.transform.as_matrix().as_ref();
-        self.scene_size = [
+        self.scene_size = IVec3::new(
             voxel_grid.width() as i32,
             voxel_grid.length() as i32,
             voxel_grid.height() as i32,
-        ];
+        );
         self.octree_depth = voxel_grid.get_mip_levels() as i32;
         self.max_steps = 200; // TODO; config refactor
         self.samples = 1; // TODO; config refactor

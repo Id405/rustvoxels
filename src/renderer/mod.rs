@@ -3,6 +3,9 @@ use winit::{dpi::PhysicalSize, window};
 
 use crate::game::World;
 
+pub use common_uniforms::CameraUniform;
+
+mod common_uniforms;
 mod glsl_loader;
 mod raytracer;
 
@@ -155,7 +158,9 @@ impl Renderer {
         self.size = new_size;
         self.surface_config.width = new_size.width;
         self.surface_config.height = new_size.height;
-        context.surface.configure(&context.device, &self.surface_config);
+        context
+            .surface
+            .configure(&context.device, &self.surface_config);
 
         self.raytracer.resize(new_size);
     }
@@ -185,7 +190,9 @@ impl Renderer {
         self.raytracer.update_uniform_data(&context, world); // uniform data must be kept up to date before rendering is performed
 
         {
-            let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let view = frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),

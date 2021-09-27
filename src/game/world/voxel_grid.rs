@@ -79,7 +79,7 @@ impl VoxelGrid {
 
         let slice = &mut self.data[p..p + 4];
         slice.iter_mut().enumerate().for_each(|(i, v)| {
-            *v = (color[i] as f32)/255.0;
+            *v = (color[i] as f32) / 255.0;
         });
     }
 
@@ -131,7 +131,8 @@ impl VoxelGrid {
             None => return,
         };
 
-        unsafe { //TODO rework away unsafe
+        unsafe {
+            //TODO rework away unsafe
             context.queue.write_texture(
                 wgpu::ImageCopyTexture {
                     texture: texture,

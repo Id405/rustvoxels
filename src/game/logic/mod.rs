@@ -1,4 +1,4 @@
-use cgmath::{One, Vector3};
+use glam::Vec3;
 
 use super::{Camera, Player, Transform};
 
@@ -9,14 +9,7 @@ pub struct GameLogic<'a> {
 impl<'a> GameLogic<'a> {
     pub fn new(player: &'a mut Option<Player>) -> Self {
         *player = Some(Player {
-            transform: Transform::new(
-                Vector3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                },
-                cgmath::Basis3::one(),
-            ),
+            transform: Transform::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, 0.0)),
             camera: Camera { fov: 90.0 },
         });
 

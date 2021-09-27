@@ -3,7 +3,7 @@ use crate::game::World;
 use self::uniforms::Uniforms;
 use wgpu::util::DeviceExt;
 
-use super::{glsl_loader, RenderContext, Vertex};
+use super::{CameraUniform, RenderContext, Vertex, glsl_loader};
 
 mod uniforms;
 
@@ -20,8 +20,10 @@ impl RenderState {
 
 pub struct Raytracer {
     render_pipeline: wgpu::RenderPipeline,
-    uniforms: Uniforms,
-    uniform_buffer: wgpu::Buffer,
+    raytrace_uniforms: Uniforms,
+    camera_uniforms: CameraUniform,
+    raytrace_uniform_buffer: wgpu::Buffer,
+    camera_uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     world_bind_group: wgpu::BindGroup,
     render_state: RenderState,
@@ -44,47 +46,72 @@ impl Raytracer {
 
         let shader_vertex;
         let shader_fragment;
-        
-        unsafe {
-            shader_vertex = context
-                .device
-                .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
-                    label: Some("raytrace_vertex"),
-                    source: shader_bundle.vertex,
-                });
 
-            shader_fragment = context
-                .device
-                .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
-                    label: Some("raytrace_fragment"),
-                    source: shader_bundle.fragment,
-                });
+        unsafe {
+            shader_vertex =
+                context
+                    .device
+                    .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                        label: Some("raytrace_vertex"),
+                        source: shader_bundle.vertex,
+                    });
+
+            shader_fragment =
+                context
+                    .device
+                    .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                        label: Some("raytrace_fragment"),
+                        source: shader_bundle.fragment,
+                    });
         }
 
-        let uniforms = Uniforms::new(world, &state);
+        let raytracing_uniforms = Uniforms::new(world, &state);
+        let camera_uniforms = CameraUniform::new(world);
 
-        let uniform_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Raytracing Uniforms"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let raytrace_uniform_buffer =
+            context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Raytracing Uniforms"),
+                    contents: bytemuck::cast_slice(&[raytracing_uniforms]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+
+        let camera_uniform_buffer =
+            context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Camera Uniforms"),
+                    contents: bytemuck::cast_slice(&[camera_uniforms]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
         let uniform_bind_group_layout =
             context
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
                         },
-                        count: None,
-                    }],
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
                     label: Some("uniform_bind_group_layout"),
                 });
 
@@ -92,10 +119,16 @@ impl Raytracer {
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &uniform_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                }],
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: raytrace_uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: camera_uniform_buffer.as_entire_binding(),
+                    },
+                ],
                 label: Some("uniform_bind_group"),
             });
 
@@ -128,7 +161,7 @@ impl Raytracer {
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
                                 view_dimension: wgpu::TextureViewDimension::D3,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: false},
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             },
                             count: None,
                         },
@@ -214,11 +247,13 @@ impl Raytracer {
 
         Self {
             render_pipeline,
-            uniforms,
-            uniform_buffer,
+            raytrace_uniforms: raytracing_uniforms,
+            raytrace_uniform_buffer,
             uniform_bind_group,
             render_state: state,
             world_bind_group,
+            camera_uniforms,
+            camera_uniform_buffer,
         }
     }
 
@@ -227,11 +262,12 @@ impl Raytracer {
     }
 
     pub fn update_uniform_data(&mut self, context: &RenderContext, world: &World) {
-        self.uniforms.update(world, &self.render_state);
+        self.raytrace_uniforms.update(world, &self.render_state);
+        self.camera_uniforms.update(world);
         context.queue.write_buffer(
-            &self.uniform_buffer,
+            &self.raytrace_uniform_buffer,
             0,
-            bytemuck::cast_slice(&[self.uniforms]),
+            bytemuck::cast_slice(&[self.raytrace_uniforms]),
         );
     }
 
