@@ -1,7 +1,7 @@
 use crate::game::World;
 
 use self::uniforms::Uniforms;
-use wgpu::util::DeviceExt;
+use wgpu::{ShaderSource, util::DeviceExt};
 
 use super::{CameraUniform, RenderContext, Vertex, glsl_loader};
 
@@ -37,7 +37,7 @@ impl Raytracer {
     ) -> Self {
         let size = context.window.inner_size();
 
-        let state = RenderState {
+        let render_state = RenderState {
             size,
             frame_count: 0,
         };
@@ -65,7 +65,17 @@ impl Raytracer {
                     });
         }
 
-        let raytracing_uniforms = Uniforms::new(world, &state);
+        // shader_vertex = context.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        //     label: Some("raytrace_vertex"),
+        //     source: ShaderSource::SpirV(shader_bundle.vertex)
+        // });
+
+        // shader_fragment= context.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        //     label: Some("raytrace_fragment"),
+        //     source: ShaderSource::SpirV(shader_bundle.fragment)
+        // });
+
+        let raytrace_uniforms = Uniforms::new(world, &render_state);
         let camera_uniforms = CameraUniform::new(world);
 
         let raytrace_uniform_buffer =
@@ -73,7 +83,7 @@ impl Raytracer {
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Raytracing Uniforms"),
-                    contents: bytemuck::cast_slice(&[raytracing_uniforms]),
+                    contents: bytemuck::cast_slice(&[raytrace_uniforms]),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
@@ -247,10 +257,10 @@ impl Raytracer {
 
         Self {
             render_pipeline,
-            raytrace_uniforms: raytracing_uniforms,
+            raytrace_uniforms,
             raytrace_uniform_buffer,
             uniform_bind_group,
-            render_state: state,
+            render_state,
             world_bind_group,
             camera_uniforms,
             camera_uniform_buffer,
@@ -268,6 +278,11 @@ impl Raytracer {
             &self.raytrace_uniform_buffer,
             0,
             bytemuck::cast_slice(&[self.raytrace_uniforms]),
+        );
+        context.queue.write_buffer(
+            &self.camera_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera_uniforms]),
         );
     }
 

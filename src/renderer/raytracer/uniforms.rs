@@ -3,12 +3,25 @@ use glam::{IVec2, IVec3, Mat4, Vec3};
 use super::RenderState;
 use crate::game::World;
 
-#[repr(C, align(16))]
+#[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Uniforms {
+    /*
+    See raytrace.frag to see the shenanagins this code is
+    changing the order of these values will break things
+    even if changes match in the shader
+    ivec3 scene_size;
+	int samples;
+    ivec2 resolution;
+    int frame_count;
+	int max_steps;
+    int octree_depth;
+	float testcolor;
+    float focal_length;
+    */
     scene_size: IVec3,
-    resolution: IVec2,
     samples: i32,
+    resolution: IVec2,
     frame_count: i32,
     max_steps: i32,
     octree_depth: i32,

@@ -1,19 +1,25 @@
 #version 460
 #extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_scalar_block_layout : require
 
 layout(location = 0) out vec4 outColor;
 
-layout(std140, set = 1, binding = 0) uniform Raytrace {
-    ivec3 scene_size;
-    ivec2 resolution;
-    int samples;
-    int frame_count;
-	int max_steps;
+/*
+Ok so UBO alignment in wgpu is absolutely evil.
+Order matters here, 3 component vectors must be followed by a 32 bit value
+*/
+
+layout(set = 1, binding = 0, std430) uniform Raytrace {
+    ivec3 scene_size; // 0 (EVEN)
+	int samples; // 1 (ODD)
+    ivec2 resolution; // 2 (EVEN)
+    int frame_count; // 1 (ODD)
+	int max_steps;  // ...
     int octree_depth;
     float focal_length;
 };
 
-layout(std140, set = 1, binding = 1) uniform Camera {
+layout(set = 1, binding = 1) uniform Camera {
 	mat4 world_matrix;
 };
 
@@ -114,10 +120,10 @@ vec3 getColor(ivec3 c, int l) {
 vec4 trace(vec2 p) {
 	// Setup the Ray Position and Direction given the camera transformation matrix
 	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
-	// vec3 raypos = vec3(world_matrix[0][3], world_matrix[1][3], world_matrix[2][3]);
-	vec3 raypos = vec3(0.1, 0.0, 0.0);
+	vec3 raypos = vec3(world_matrix[0][3], world_matrix[1][3], world_matrix[2][3]);
+	// vec3 raypos = vec3(0.1, 0.0, 0.0);
 	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
-	// raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
+	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
 
 	// Variables needed for the bounding box function
 	vec3 n;
@@ -228,8 +234,8 @@ vec4 trace(vec2 p) {
 	// return vec4(outColor, 1); // Return scene lit only using anti-aliasing
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	// return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
-	return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
+	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
+	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 
 void mainImage(in vec2 fragCoord )
@@ -255,6 +261,6 @@ void mainImage(in vec2 fragCoord )
 }
 
 void main() {
-	// mainImage(gl_FragCoord.xy);
-	outColor = vec4(vec3(float(resolution.x)/1920, float(resolution.y)/1080, 0.0), 1.0);
+	mainImage(gl_FragCoord.xy);
+	// outColor = vec4(vec3(testcolor), 1.0);
 }

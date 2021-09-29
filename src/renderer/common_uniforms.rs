@@ -2,7 +2,7 @@ use glam::Mat4;
 
 use crate::game::World;
 
-#[repr(C, align(16))]
+#[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct CameraUniform {
     transform: Mat4,
