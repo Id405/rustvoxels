@@ -11,12 +11,12 @@ pub struct Uniforms {
     changing the order of these values will break things
     even if changes match in the shader
     ivec3 scene_size;
-	int samples;
+    int samples;
     ivec2 resolution;
     int frame_count;
-	int max_steps;
+    int max_steps;
     int octree_depth;
-	float testcolor;
+    float testcolor;
     float focal_length;
     */
     scene_size: IVec3,

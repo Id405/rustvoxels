@@ -16,7 +16,12 @@ impl CameraUniform {
     }
 
     pub fn update(&mut self, world: &World) {
-        self.transform = world.player.as_ref().expect("ERROR: expected resource not found").transform.as_matrix();
+        self.transform = world
+            .player
+            .as_ref()
+            .expect("ERROR: expected resource not found")
+            .transform
+            .as_matrix();
     }
 }
 

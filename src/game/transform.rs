@@ -9,6 +9,8 @@ pub struct Transform {
 impl Transform {
     pub fn as_matrix(&self) -> Mat4 {
         Mat4::from_translation(self.position)
+            * Mat4::from_rotation_z(self.rotation.z)
+            * Mat4::from_rotation_x(self.rotation.x)
     }
 
     pub fn position(&self) -> Vec3 {

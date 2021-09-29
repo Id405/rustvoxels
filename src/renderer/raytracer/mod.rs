@@ -1,9 +1,9 @@
 use crate::game::World;
 
 use self::uniforms::Uniforms;
-use wgpu::{ShaderSource, util::DeviceExt};
+use wgpu::{util::DeviceExt, ShaderSource};
 
-use super::{CameraUniform, RenderContext, Vertex, glsl_loader};
+use super::{glsl_loader, CameraUniform, RenderContext, Vertex};
 
 mod uniforms;
 
