@@ -6,17 +6,17 @@ layout(location = 0) out vec4 outColor;
 
 /*
 Ok so UBO alignment in wgpu is absolutely evil.
-Order matters here, 3 component vectors must be followed by a 32 bit value
+Order matters here, multi component values must be placed at a multiple of four
 */
 
 layout(set = 1, binding = 0, std430) uniform Raytrace {
-    ivec3 scene_size; // 0 (EVEN)
-	int samples; // 1 (ODD)
-    ivec2 resolution; // 2 (EVEN)
-    int frame_count; // 1 (ODD)
-	int max_steps;  // ...
-    int octree_depth;
-    float focal_length;
+    ivec3 scene_size; // POSITION 0
+	int samples; // POSITION 3
+    ivec2 resolution; // POSITION 4
+    int frame_count; // POSITION 6
+	int max_steps;  // POSITION 7
+    int octree_depth; // POSITION 8
+    float focal_length; // POSITION 9
 };
 
 layout(set = 1, binding = 1) uniform Camera {
@@ -129,14 +129,13 @@ vec4 trace(vec2 p) {
 	vec3 n;
 	vec2 res;
 
-	// if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
-	// 	if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
-	// 		raypos += raydir * res.x + n * 0.00001;
-	// 	} else {
-	// 		// return vec4((SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER) * SUNLIGHTSTRENGTH, 10000000);
-	// 		return vec4(1.0, 0.0, 0.0, 1.0);
-	// 	} //TODO normal data is not needed
-	// }
+	if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
+		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
+			raypos += raydir * res.x + n * 0.00001;
+		} else {
+			return vec4(1.0, 0.0, 0.0, 1.0);
+		} //TODO normal data is not needed
+	}
 
 	int maxLevel = octree_depth-1;
 	int level = maxLevel/2; // The current level in the octree
@@ -162,10 +161,11 @@ vec4 trace(vec2 p) {
 	vec3 outColor = vec3(1);
 	float depth = 0;
 
-	for(int i=0; i<200/*max_steps*/; i++) { // Begin marching the ray now
-		// if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
-		// 	break;
-		// }
+	for(int i=0; i<max_steps; i++) { // Begin marching the ray now
+		if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
+			// return vec4(vec3(float(i)/float(4)), 1.0);
+			break;
+		}
 
 		bool nonEmpty = getVoxel(gridPosition >> level, level); // Is the current voxel empty
 		bool belowEmpty = !getVoxel(gridPosition >> (level + 1), level + 1) && level < maxLevel; // Can we move upwards an octree level?
@@ -179,12 +179,11 @@ vec4 trace(vec2 p) {
 				modifiedRayPosition = raypos + raydir * dist; // Find point of intersection between ray and the current grid position
 			}
 
-			gridPosition = ivec3(floor(modifiedRayPosition - normal * 0.0001)); // Calculate a new grid position given that information
-
 			if(level == 0 && nonEmpty) { // If we are at the lowest level and hit a non empty grid position that means we hit scene geometry and we can scatter the ray off of it
-				// return vec4(getColor(gridPosition >> level, level), 1.0); // uncomment to disable lighting
+				return vec4(getColor(gridPosition >> level, level), 1.0); // uncomment to disable lighting
+				// return vec4(vec3(complexity/(maxLevel)), 1); // Return complexity map
 
-				outColor *= getColor(gridPosition >> level, level);
+				// outColor *= getColor(gridPosition >> level, level);
 				// outColor *= 0.5; // Disable color and only view lighting
 
 				if(depth == 0) { // Update the depth variable to store the distance to the first intersection with the scene geometry
@@ -201,6 +200,8 @@ vec4 trace(vec2 p) {
 				raydirsign = greaterThan(sign(raydir), vec3(0));
 				dist = 0; // Reset the distance to zero
 			}
+
+			gridPosition = ivec3(floor(modifiedRayPosition - normal * 0.0001)); // Calculate a new grid position given that information
 
 			level -= int(nonEmpty); // If we can move down, move down
 			level = max(0, level);
@@ -230,11 +231,11 @@ vec4 trace(vec2 p) {
 		steps = i;
 	}
 
-	// return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
-	// return vec4(outColor, 1); // Return scene lit only using anti-aliasing
+	return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
+	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
+	// return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 
@@ -262,5 +263,5 @@ void mainImage(in vec2 fragCoord )
 
 void main() {
 	mainImage(gl_FragCoord.xy);
-	// outColor = vec4(vec3(testcolor), 1.0);
+	// outColor = vec4(vec3(1.0, 0.0, 0.0), 1.0);
 }

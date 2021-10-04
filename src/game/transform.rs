@@ -37,6 +37,10 @@ impl Transform {
         todo!();
     }
 
+    // pub fn move(&mut self, movement: Vec3) {
+
+    // }
+
     pub fn new(position: Vec3, rotation: Vec3) -> Self {
         Self { position, rotation }
     }

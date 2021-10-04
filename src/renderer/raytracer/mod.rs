@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use crate::game::World;
 
 use self::uniforms::Uniforms;
-use wgpu::{util::DeviceExt, ShaderSource};
+use futures::lock::Mutex;
+use wgpu::util::DeviceExt;
 
 use super::{glsl_loader, CameraUniform, RenderContext, Vertex};
 
@@ -27,13 +30,14 @@ pub struct Raytracer {
     uniform_bind_group: wgpu::BindGroup,
     world_bind_group: wgpu::BindGroup,
     render_state: RenderState,
+    world: Arc<Mutex<World>>,
 }
 
 impl Raytracer {
-    pub fn new(
+    pub async fn new(
         context: &RenderContext,
+        world: Arc<Mutex<World>>,
         sc_desc: &wgpu::SurfaceConfiguration,
-        world: &World,
     ) -> Self {
         let size = context.window.inner_size();
 
@@ -75,8 +79,8 @@ impl Raytracer {
         //     source: ShaderSource::SpirV(shader_bundle.fragment)
         // });
 
-        let raytrace_uniforms = Uniforms::new(world, &render_state);
-        let camera_uniforms = CameraUniform::new(world);
+        let raytrace_uniforms = Uniforms::new(world.clone(), &render_state).await;
+        let camera_uniforms = CameraUniform::new(world.clone(), &context).await;
 
         let raytrace_uniform_buffer =
             context
@@ -142,12 +146,13 @@ impl Raytracer {
                 label: Some("uniform_bind_group"),
             });
 
-        let world = world
+        let world_lock = world.lock().await;
+        let scene = world_lock
             .voxel_grid
             .as_ref()
             .expect("ERROR: expected resource not present");
 
-        let world_texture = world.as_texture();
+        let world_texture = scene.as_texture();
 
         let world_texture_view = world_texture.create_view(&wgpu::TextureViewDescriptor::default());
         // let world_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
@@ -264,6 +269,7 @@ impl Raytracer {
             world_bind_group,
             camera_uniforms,
             camera_uniform_buffer,
+            world: world.clone(),
         }
     }
 
@@ -271,9 +277,13 @@ impl Raytracer {
         &self.render_pipeline
     }
 
-    pub fn update_uniform_data(&mut self, context: &RenderContext, world: &World) {
-        self.raytrace_uniforms.update(world, &self.render_state);
-        self.camera_uniforms.update(world);
+    pub async fn update_uniform_data(&mut self, context: &RenderContext) {
+        self.raytrace_uniforms
+            .update(self.world.clone(), &self.render_state)
+            .await;
+        self.camera_uniforms
+            .update(self.world.clone(), context)
+            .await;
         context.queue.write_buffer(
             &self.raytrace_uniform_buffer,
             0,

@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use futures::lock::Mutex;
 use glam::{IVec2, IVec3, Mat4, Vec3};
 
 use super::RenderState;
@@ -32,13 +35,14 @@ unsafe impl bytemuck::Zeroable for Uniforms {}
 unsafe impl bytemuck::Pod for Uniforms {}
 
 impl Uniforms {
-    pub fn new(world: &World, render_state: &RenderState) -> Self {
+    pub async fn new(world: Arc<Mutex<World>>, render_state: &RenderState) -> Self {
         let mut uniforms = Self::default();
-        uniforms.update(world, render_state);
+        uniforms.update(world, render_state).await;
         uniforms
     }
 
-    pub fn update(&mut self, world: &World, render_state: &RenderState) {
+    pub async fn update(&mut self, world: Arc<Mutex<World>>, render_state: &RenderState) {
+        let world = world.lock().await;
         let player = world
             .player
             .as_ref()
@@ -62,5 +66,8 @@ impl Uniforms {
         self.octree_depth = voxel_grid.get_mip_levels() as i32;
         self.max_steps = 200; // TODO; config refactor
         self.samples = 1; // TODO; config refactor
+        if self.frame_count % 60 == 0 {
+            println!("{:?}", self);
+        }
     }
 }

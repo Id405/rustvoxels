@@ -1,7 +1,5 @@
 use shaderc::*;
-use std::{borrow::Cow, fs::read_to_string, io::Write}; // bad form
-
-use wgpu::ShaderSource;
+use std::{borrow::Cow, fs::read_to_string}; // bad form
 
 trait ShaderUnwrap {
     fn shader_unwrap(self) -> CompilationArtifact;
@@ -12,7 +10,7 @@ impl ShaderUnwrap for Result<CompilationArtifact> {
         match self {
             Ok(value) => value,
             Err(error) => match error {
-                Error::CompilationError(error_code, error_text) => panic!("{}", error_text),
+                Error::CompilationError(_, error_text) => panic!("{}", error_text),
                 error => panic!("{}", error),
             },
         }
@@ -39,7 +37,7 @@ impl<'a> ShaderBundle<'a> {
         opts.set_optimization_level(OptimizationLevel::Performance);
         opts.set_target_env(TargetEnv::Vulkan, EnvVersion::WebGPU as u32); // Platform compatibility issues will come from this. Needa force vulkan for every platform
 
-        opts.set_include_callback(move |name, include_type, source_file, _| {
+        opts.set_include_callback(move |_, _, _, _| {
             todo!();
         }); // Panic on include
 

@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
+use futures::lock::Mutex;
 use glam::Mat4;
 
 use crate::game::World;
+
+use super::RenderContext;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
@@ -9,14 +14,17 @@ pub struct CameraUniform {
 }
 
 impl CameraUniform {
-    pub fn new(world: &World) -> Self {
+    // TODO uniform update trait
+    pub async fn new(world: Arc<Mutex<World>>, context: &RenderContext) -> Self {
         let mut uniforms = Self::default();
-        uniforms.update(world);
+        uniforms.update(world, context).await;
         uniforms
     }
 
-    pub fn update(&mut self, world: &World) {
+    pub async fn update(&mut self, world: Arc<Mutex<World>>, context: &RenderContext) {
         self.transform = world
+            .lock()
+            .await
             .player
             .as_ref()
             .expect("ERROR: expected resource not found")

@@ -1,13 +1,18 @@
+use std::{rc::Rc, sync::Arc};
+
+use futures::lock::Mutex;
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window};
 
 use crate::game::World;
 
 pub use common_uniforms::CameraUniform;
+pub use render_context::RenderContext;
 
 mod common_uniforms;
 mod glsl_loader;
 mod raytracer;
+mod render_context;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -58,67 +63,17 @@ const VERTICES: &[Vertex] = &[
     },
 ];
 
-pub struct RenderContext {
-    pub window: winit::window::Window,
-    pub instance: wgpu::Instance,
-    pub surface: wgpu::Surface,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-}
-
-impl RenderContext {
-    pub async fn new(event_loop: &winit::event_loop::EventLoop<()>) -> RenderContext {
-        let window = winit::window::WindowBuilder::new()
-            .with_title("rustvoxels")
-            .build(&event_loop)
-            .unwrap();
-
-        window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-        let surface = unsafe { instance.create_surface(&window) };
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-            })
-            .await
-            .unwrap();
-
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH,
-                    limits: wgpu::Limits::default(),
-                    label: None,
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
-
-        Self {
-            window,
-            instance,
-            surface,
-            adapter,
-            device,
-            queue,
-        }
-    }
-}
-
 pub struct Renderer {
     surface_config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     vertex_buffer: wgpu::Buffer,
     raytracer: raytracer::Raytracer,
+    world: Arc<Mutex<World>>,
 }
 
 impl Renderer {
     // Creating some of the wgpu types requires async code
-    pub async fn new(context: &RenderContext, world: &World) -> Renderer {
+    pub async fn new(context: &RenderContext, world: Arc<Mutex<World>>) -> Renderer {
         let size = context.window.inner_size();
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -136,7 +91,7 @@ impl Renderer {
 
         // let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
 
-        let raytracer = raytracer::Raytracer::new(context, &surface_config, &world); // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+        let raytracer = raytracer::Raytracer::new(context, world.clone(), &surface_config).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
         let vertex_buffer = context
             .device
@@ -151,6 +106,7 @@ impl Renderer {
             size,
             vertex_buffer,
             raytracer,
+            world,
         }
     }
 
@@ -174,11 +130,7 @@ impl Renderer {
         // remove `todo!()`
     }
 
-    pub fn render(
-        &mut self,
-        context: &RenderContext,
-        world: &World,
-    ) -> Result<(), wgpu::SurfaceError> {
+    pub async fn render(&mut self, context: &RenderContext) -> Result<(), wgpu::SurfaceError> {
         let frame = context.surface.get_current_frame()?.output;
 
         let mut encoder = context
@@ -187,7 +139,7 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
-        self.raytracer.update_uniform_data(&context, world); // uniform data must be kept up to date before rendering is performed
+        self.raytracer.update_uniform_data(&context).await; // uniform data must be kept up to date before rendering is performed
 
         {
             let view = frame
