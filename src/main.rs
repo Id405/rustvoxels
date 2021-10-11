@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use futures::lock::Mutex;
+use game::logic::InputEvent;
 use game::{GameLogic, World};
 use renderer::RenderContext;
 use winit::{event::*, event_loop::ControlFlow};
@@ -23,6 +24,8 @@ fn main() {
     let mut renderer =
         futures::executor::block_on(renderer::Renderer::new(&context, world.clone()));
 
+    let mut last_frame = std::time::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::WindowEvent {
@@ -33,7 +36,9 @@ fn main() {
                     // UPDATED!
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::KeyboardInput { input, .. } => game_logic.input_event(input),
+                        WindowEvent::KeyboardInput { input, .. } => futures::executor::block_on(
+                            game_logic.input_event(&InputEvent::Keyboard(*input)),
+                        ),
                         WindowEvent::Resized(physical_size) => {
                             renderer.resize(&context, *physical_size);
                         }
@@ -57,10 +62,22 @@ fn main() {
                 };
             }
             Event::MainEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually
-                // request it.
+                let delta: std::time::Duration = std::time::Instant::now() - last_frame;
+                context.window.set_cursor_visible(false);
+                if let Err(why) = context.window.set_cursor_grab(true) {
+                    eprintln!("{:?}", why);
+                } // TODO; rework to have cursor grabbing dictated by gamelogic
+                futures::executor::block_on(game_logic.update(delta.as_secs_f32()));
+                last_frame = std::time::Instant::now();
                 context.window.request_redraw();
             }
+            Event::DeviceEvent { event, .. } => match event {
+                DeviceEvent::MouseMotion { delta } => {
+                    println!("{:?}", delta);
+                    futures::executor::block_on(game_logic.input_event(&InputEvent::Mouse(delta)))
+                }
+                _ => (),
+            },
             _ => {}
         };
     });

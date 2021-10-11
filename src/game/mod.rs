@@ -1,7 +1,7 @@
-mod camera;
-mod logic;
-mod player;
-mod transform;
+pub mod camera;
+pub mod logic;
+pub mod player;
+pub mod transform;
 pub mod world;
 
 pub use camera::Camera;

@@ -1,6 +1,7 @@
 use crate::renderer::CameraUniform;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4, Vec4Swizzles};
 
+#[derive(Debug)]
 pub struct Transform {
     position: Vec3,
     rotation: Vec3,
@@ -37,9 +38,13 @@ impl Transform {
         todo!();
     }
 
-    // pub fn move(&mut self, movement: Vec3) {
-
-    // }
+    pub fn walk(&mut self, movement: Vec3) {
+        // Translate with respect to rotation
+        let delta = (Mat4::from_rotation_z(self.rotation().z)
+            * Vec4::new(movement.x, movement.y, movement.z, 1.0))
+        .xyz();
+        self.add_position(delta)
+    }
 
     pub fn new(position: Vec3, rotation: Vec3) -> Self {
         Self { position, rotation }

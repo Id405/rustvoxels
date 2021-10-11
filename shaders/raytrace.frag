@@ -120,7 +120,7 @@ vec3 getColor(ivec3 c, int l) {
 vec4 trace(vec2 p) {
 	// Setup the Ray Position and Direction given the camera transformation matrix
 	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
-	vec3 raypos = vec3(world_matrix[0][3], world_matrix[1][3], world_matrix[2][3]);
+	vec3 raypos = vec3(world_matrix * vec4(0.0, 0.0, 0.0, 1.0));
 	// vec3 raypos = vec3(0.1, 0.0, 0.0);
 	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
 	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;

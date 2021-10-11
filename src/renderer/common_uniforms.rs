@@ -22,9 +22,8 @@ impl CameraUniform {
     }
 
     pub async fn update(&mut self, world: Arc<Mutex<World>>, context: &RenderContext) {
-        self.transform = world
-            .lock()
-            .await
+        let world_lock = world.lock().await;
+        self.transform = world_lock
             .player
             .as_ref()
             .expect("ERROR: expected resource not found")
