@@ -73,7 +73,6 @@ fn main() {
             }
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::MouseMotion { delta } => {
-                    println!("{:?}", delta);
                     futures::executor::block_on(game_logic.input_event(&InputEvent::Mouse(delta)))
                 }
                 _ => (),

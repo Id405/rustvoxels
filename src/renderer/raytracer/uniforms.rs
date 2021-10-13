@@ -65,7 +65,7 @@ impl Uniforms {
         );
         self.octree_depth = voxel_grid.get_mip_levels() as i32;
         self.max_steps = 200; // TODO; config refactor
-        self.samples = 1; // TODO; config refactor
+        self.samples = 10; // TODO; config refactor
         if self.frame_count % 60 == 0 {
             println!("{:?}", self);
         }

@@ -133,7 +133,7 @@ vec4 trace(vec2 p) {
 		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
 			raypos += raydir * res.x + n * 0.00001;
 		} else {
-			return vec4(1.0, 0.0, 0.0, 1.0);
+			return vec4(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 1.0); // Return fully lit scene
 		} //TODO normal data is not needed
 	}
 
@@ -180,10 +180,10 @@ vec4 trace(vec2 p) {
 			}
 
 			if(level == 0 && nonEmpty) { // If we are at the lowest level and hit a non empty grid position that means we hit scene geometry and we can scatter the ray off of it
-				return vec4(getColor(gridPosition >> level, level), 1.0); // uncomment to disable lighting
+				// return vec4(getColor(gridPosition >> level, level), 1.0); // uncomment to disable lighting
 				// return vec4(vec3(complexity/(maxLevel)), 1); // Return complexity map
 
-				// outColor *= getColor(gridPosition >> level, level);
+				outColor *= getColor(gridPosition >> level, level);
 				// outColor *= 0.5; // Disable color and only view lighting
 
 				if(depth == 0) { // Update the depth variable to store the distance to the first intersection with the scene geometry
@@ -231,11 +231,11 @@ vec4 trace(vec2 p) {
 		steps = i;
 	}
 
-	return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
+	// return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
 	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	// return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
+	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 

@@ -156,13 +156,20 @@ impl VoxelGrid {
                         let pos = [x, z, y];
                         let mut values: Vec<Vec<_>> = Vec::new();
 
-                        for dx in 0..1 {
-                            for dz in 0..1 {
-                                for dy in 0..1 {
+                        for dx in 0..3 {
+                            for dz in 0..3 {
+                                for dy in 0..3 {
                                     let mut dpos = pos.map(|x| x * 2);
-                                    dpos = [dpos[0] + dx, dpos[1] + dy, dpos[2] + dz];
+                                    dpos = [
+                                        ((dpos[0] + dx) as isize - 1).max(0) as usize,
+                                        ((dpos[1] + dy) as isize - 1).max(0) as usize,
+                                        ((dpos[2] + dz) as isize - 1).max(0) as usize,
+                                    ];
 
-                                    let p = Self::grid_position(dpos, (width, height, length));
+                                    let p = Self::grid_position(
+                                        dpos,
+                                        (width * 2, height * 2, length * 2),
+                                    );
 
                                     values.push(
                                         data[level - 1][p..p + 4].to_vec().try_into().unwrap(),
@@ -171,19 +178,28 @@ impl VoxelGrid {
                             }
                         }
 
-                        // let values: Vec<_> = values.iter().filter(|x| x[3] != 0.0).collect();
+                        // if values.filter(|x| x[3] != 0)
 
-                        let average: [f32; 4] = values
-                            .iter()
-                            .fold([0.0; 4], |sum, val| {
-                                [
-                                    sum[0] + val[0],
-                                    sum[1] + val[1],
-                                    sum[2] + val[2],
-                                    sum[3] + val[3],
-                                ]
-                            })
-                            .map(|x| x / values.len() as f32);
+                        let mut count = 0;
+                        let sum: [f32; 4] = values.iter().fold([0.0; 4], |mut sum, val| {
+                            if val[3] != 0.0 {
+                                for i in 0..3 {
+                                    sum[i] += val[i];
+                                }
+                                count += 1;
+                            }
+
+                            sum[3] += val[3];
+
+                            sum
+                        });
+
+                        let average = [
+                            sum[0] / count as f32,
+                            sum[1] / count as f32,
+                            sum[2] / count as f32,
+                            sum[3] / values.len() as f32,
+                        ];
 
                         let p = Self::grid_position(pos, (width, height, length));
 
@@ -238,7 +254,6 @@ impl VoxelGrid {
     }
 
     pub fn get_mip_levels(&self) -> u32 {
-        // (((self.width).min((self.height).min(self.length)) as f32).log2()).floor() as u32
-        1
+        (((self.width).min((self.height).min(self.length)) as f32).log2()).floor() as u32
     }
 }

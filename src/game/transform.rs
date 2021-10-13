@@ -35,7 +35,7 @@ impl Transform {
     }
 
     pub fn add_rotation(&mut self, rotation: Vec3) {
-        todo!();
+        self.rotation += rotation;
     }
 
     pub fn walk(&mut self, movement: Vec3) {

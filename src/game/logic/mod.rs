@@ -53,9 +53,11 @@ impl GameLogic {
             InputEvent::Keyboard(key_event) => self.keyboard_state.input_event(key_event),
             InputEvent::Mouse(delta) => {
                 println!("{:?}", delta);
-                player
-                    .transform
-                    .add_rotation(Vec3::new(delta.0 as f32, 0.0, delta.1 as f32))
+                player.transform.add_rotation(Vec3::new(
+                    delta.1 as f32 * 0.00001,
+                    0.0,
+                    delta.0 as f32 * 0.00001,
+                )); //TODO; configuration
             }
             InputEvent::MouseButton(_) => todo!(),
         }
@@ -95,8 +97,29 @@ impl GameLogic {
             move_dir.z -= 1.0;
         }
 
-        move_dir *= delta * 10.0;
+        let mut look_delta = Vec3::new(0.0, 0.0, 0.0);
+
+        if self.keyboard_state.is_pressed(Up) {
+            look_delta.x += 1.0;
+        }
+
+        if self.keyboard_state.is_pressed(Down) {
+            look_delta.x -= 1.0;
+        }
+
+        if self.keyboard_state.is_pressed(Left) {
+            look_delta.z += 1.0;
+        }
+
+        if self.keyboard_state.is_pressed(Right) {
+            look_delta.z -= 1.0;
+        }
+
+        look_delta = look_delta.normalize_or_zero() * delta * 1.0;
+
+        move_dir = move_dir.normalize_or_zero() * delta * 20.0;
 
         player.transform.walk(move_dir);
+        player.transform.add_rotation(look_delta);
     }
 }
