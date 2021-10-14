@@ -10,9 +10,10 @@ use crate::game::World;
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Uniforms {
     /*
-    See raytrace.frag to see the shenanagins this code is
-    changing the order of these values will break things
-    even if changes match in the shader
+    This code is a mess
+    It wasted weeks of my life
+    Do not edit it
+
     ivec3 scene_size;
     int samples;
     ivec2 resolution;
