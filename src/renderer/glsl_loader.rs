@@ -1,5 +1,7 @@
 use shaderc::*;
-use std::{borrow::Cow, fs::read_to_string}; // bad form
+use std::{borrow::Cow, fs::read_to_string};
+
+use super::RenderContext; // bad form
 
 trait ShaderUnwrap {
     fn shader_unwrap(self) -> CompilationArtifact;
@@ -65,5 +67,28 @@ impl<'a> ShaderBundle<'a> {
             vertex: Cow::Owned(vertex.as_binary().to_owned()),
             fragment: Cow::Owned(fragment.as_binary().to_owned()),
         }
+    }
+
+    pub unsafe fn create_shader_module_spirv(
+        self,
+        context: &RenderContext,
+    ) -> (wgpu::ShaderModule, wgpu::ShaderModule) {
+        let shader_vertex =
+            context
+                .device
+                .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                    label: Some("raytrace_vertex"),
+                    source: self.vertex,
+                });
+
+        let shader_fragment =
+            context
+                .device
+                .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                    label: Some("raytrace_fragment"),
+                    source: self.fragment,
+                });
+
+        (shader_vertex, shader_fragment)
     }
 }

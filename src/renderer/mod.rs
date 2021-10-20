@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use futures::lock::Mutex;
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, CommandEncoder};
 use winit::{dpi::PhysicalSize, window};
 
 use crate::game::World;
@@ -13,6 +13,7 @@ mod common_uniforms;
 mod glsl_loader;
 mod raytracer;
 mod render_context;
+mod texture_renderer;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -68,6 +69,7 @@ pub struct Renderer {
     size: winit::dpi::PhysicalSize<u32>,
     vertex_buffer: wgpu::Buffer,
     raytracer: raytracer::Raytracer,
+    texture_renderer: texture_renderer::TextureRenderer,
     world: Arc<Mutex<World>>,
 }
 
@@ -93,6 +95,8 @@ impl Renderer {
 
         let raytracer = raytracer::Raytracer::new(context, world.clone(), &surface_config).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
+        let texture_renderer = texture_renderer::TextureRenderer::new(context, &surface_config, raytracer.render_texture_view()).await;
+
         let vertex_buffer = context
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -107,6 +111,7 @@ impl Renderer {
             vertex_buffer,
             raytracer,
             world,
+            texture_renderer,
         }
     }
 
@@ -118,7 +123,8 @@ impl Renderer {
             .surface
             .configure(&context.device, &self.surface_config);
 
-        self.raytracer.resize(new_size);
+        self.raytracer.resize(new_size, &context);
+        self.texture_renderer.resize(new_size, self.raytracer.render_texture_view(), &context);
     }
 
     pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
@@ -139,45 +145,28 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
-        self.raytracer.update_uniform_data(&context).await; // uniform data must be kept up to date before rendering is performed
+        self.raytracer
+            .render(&mut encoder, &context, &self.vertex_buffer)
+            .await;
 
-        {
-            let view = frame
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor::default());
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
-
-            render_pass.set_pipeline(self.raytracer.render_pipeline()); // TODO: rendering structs take control of their own swap chain and are interacted with through a RenderStruct trait
-            render_pass.set_bind_group(1, self.raytracer.uniform_bind_group(), &[]);
-            render_pass.set_bind_group(0, self.raytracer.world_bind_group(), &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..VERTICES.len() as u32, 0..1);
-        }
+        self.texture_renderer
+            .render(
+                &mut encoder,
+                &context,
+                &self.vertex_buffer,
+                &frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
+            )
+            .await;
 
         // submit will accept anything that implements IntoIter
         context.queue.submit(std::iter::once(encoder.finish()));
 
-        self.raytracer.frame_complete();
-
         Ok(())
     }
+
+    fn render_texture(&self, context: &RenderContext, encoder: &CommandEncoder) {}
 
     pub fn size(&self) -> PhysicalSize<u32> {
         self.size

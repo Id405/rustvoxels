@@ -4,9 +4,9 @@ use crate::game::World;
 
 use self::uniforms::Uniforms;
 use futures::lock::Mutex;
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, Buffer, CommandEncoder, Texture, TextureView};
 
-use super::{glsl_loader, CameraUniform, RenderContext, Vertex};
+use super::{glsl_loader, CameraUniform, RenderContext, Vertex, VERTICES};
 
 mod uniforms;
 
@@ -30,10 +30,13 @@ pub struct Raytracer {
     uniform_bind_group: wgpu::BindGroup,
     world_bind_group: wgpu::BindGroup,
     render_state: RenderState,
+    render_texture: Texture,
+    render_texture_view: TextureView,
     world: Arc<Mutex<World>>,
 }
 
 impl Raytracer {
+    // TODO; renderable trait
     pub async fn new(
         context: &RenderContext,
         world: Arc<Mutex<World>>,
@@ -46,38 +49,14 @@ impl Raytracer {
             frame_count: 0,
         };
 
-        let shader_bundle = glsl_loader::ShaderBundle::from_path("raytrace"); // todo: live reloading
-
-        let shader_vertex;
-        let shader_fragment;
+        let shaders;
 
         unsafe {
-            shader_vertex =
-                context
-                    .device
-                    .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
-                        label: Some("raytrace_vertex"),
-                        source: shader_bundle.vertex,
-                    });
-
-            shader_fragment =
-                context
-                    .device
-                    .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
-                        label: Some("raytrace_fragment"),
-                        source: shader_bundle.fragment,
-                    });
+            shaders = glsl_loader::ShaderBundle::from_path("raytrace")
+                .create_shader_module_spirv(context);
         }
 
-        // shader_vertex = context.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        //     label: Some("raytrace_vertex"),
-        //     source: ShaderSource::SpirV(shader_bundle.vertex)
-        // });
-
-        // shader_fragment= context.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        //     label: Some("raytrace_fragment"),
-        //     source: ShaderSource::SpirV(shader_bundle.fragment)
-        // });
+        let (shader_vertex, shader_fragment) = shaders;
 
         let raytrace_uniforms = Uniforms::new(world.clone(), &render_state).await;
         let camera_uniforms = CameraUniform::new(world.clone(), &context).await;
@@ -218,7 +197,7 @@ impl Raytracer {
             context
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Layout"),
+                    label: Some("Raytracer Render Pipeline Layout"),
                     bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
                     push_constant_ranges: &[],
                 });
@@ -227,7 +206,7 @@ impl Raytracer {
             context
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Render Pipeline"),
+                    label: Some("Raytracer Render Pipeline"),
                     layout: Some(&render_pipeline_layout),
                     vertex: wgpu::VertexState {
                         buffers: &[Vertex::desc()],
@@ -238,7 +217,7 @@ impl Raytracer {
                         module: &shader_fragment,
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
-                            format: sc_desc.format,
+                            format: wgpu::TextureFormat::Rgba8UnormSrgb,
                             blend: Some(wgpu::BlendState::REPLACE),
                             write_mask: wgpu::ColorWrites::ALL,
                         }],
@@ -260,6 +239,25 @@ impl Raytracer {
                     },
                 });
 
+        let render_texture_size = wgpu::Extent3d {
+            width: render_state.size.width,
+            height: render_state.size.height,
+            depth_or_array_layers: 1,
+        };
+
+        let render_texture = context.device.create_texture(&wgpu::TextureDescriptor {
+            size: render_texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: Some("raytrace render attachment"),
+        });
+
+        let render_texture_view =
+            render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         Self {
             render_pipeline,
             raytrace_uniforms,
@@ -269,15 +267,60 @@ impl Raytracer {
             world_bind_group,
             camera_uniforms,
             camera_uniform_buffer,
+            render_texture,
+            render_texture_view,
             world: world.clone(),
         }
     }
 
-    pub fn render_pipeline(&self) -> &wgpu::RenderPipeline {
+    pub async fn render(
+        &mut self,
+        encoder: &mut CommandEncoder,
+        context: &RenderContext,
+        vertex_buffer: &Buffer,
+    ) {
+        self.render_state.frame_count += 1;
+
+        self.update_uniform_data(&context).await; // uniform data must be kept up to date before rendering is performed
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Raytracer Render Pass"),
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: self.render_texture_view(),
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
+
+        render_pass.set_pipeline(self.render_pipeline()); // TODO: rendering structs take control of their own swap chain and are interacted with through a RenderStruct trait
+        render_pass.set_bind_group(1, self.uniform_bind_group(), &[]);
+        render_pass.set_bind_group(0, self.world_bind_group(), &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.draw(0..VERTICES.len() as u32, 0..1);
+    }
+
+    pub fn render_texture(&self) -> &Texture {
+        &self.render_texture
+    }
+
+    pub fn render_texture_view(&self) -> &TextureView {
+        &self.render_texture_view
+    }
+
+    fn render_pipeline(&self) -> &wgpu::RenderPipeline {
         &self.render_pipeline
     }
 
-    pub async fn update_uniform_data(&mut self, context: &RenderContext) {
+    async fn update_uniform_data(&mut self, context: &RenderContext) {
         self.raytrace_uniforms
             .update(self.world.clone(), &self.render_state)
             .await;
@@ -296,20 +339,38 @@ impl Raytracer {
         );
     }
 
-    pub fn uniform_bind_group(&self) -> &wgpu::BindGroup {
+    fn uniform_bind_group(&self) -> &wgpu::BindGroup {
         &self.uniform_bind_group
     }
 
-    pub fn world_bind_group(&self) -> &wgpu::BindGroup {
+    fn world_bind_group(&self) -> &wgpu::BindGroup {
         &self.world_bind_group
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    #[deprecated] // TOOD; move into resize trait
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, context: &RenderContext) {
         self.render_state.size = new_size;
-    }
 
-    #[deprecated]
-    pub fn frame_complete(&mut self) {
-        self.render_state.frame_count += 1;
+        let render_texture_size = wgpu::Extent3d {
+            width: new_size.width,
+            height: new_size.height,
+            depth_or_array_layers: 1,
+        };
+
+        let render_texture = context.device.create_texture(&wgpu::TextureDescriptor {
+            size: render_texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: Some("raytrace render attachment"),
+        });
+
+        let render_texture_view =
+            render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.render_texture = render_texture;
+        self.render_texture_view = render_texture_view;
     }
 }

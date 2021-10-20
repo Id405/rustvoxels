@@ -14,6 +14,8 @@ pub struct Uniforms {
     It wasted weeks of my life
     Do not edit it
 
+    --> https://sorth.github.io/learn-wgpu/showcase/alignment has information on how to make this code not so terrible
+
     ivec3 scene_size;
     int samples;
     ivec2 resolution;
@@ -36,6 +38,7 @@ unsafe impl bytemuck::Zeroable for Uniforms {}
 unsafe impl bytemuck::Pod for Uniforms {}
 
 impl Uniforms {
+    // TODO; uniforms trait
     pub async fn new(world: Arc<Mutex<World>>, render_state: &RenderState) -> Self {
         let mut uniforms = Self::default();
         uniforms.update(world, render_state).await;
