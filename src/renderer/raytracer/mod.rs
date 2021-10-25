@@ -6,30 +6,18 @@ use self::uniforms::Uniforms;
 use futures::lock::Mutex;
 use wgpu::{util::DeviceExt, Buffer, CommandEncoder, Texture, TextureView};
 
-use super::{glsl_loader, CameraUniform, RenderContext, Vertex, VERTICES};
+use crevice::std430::{AsStd430, Std430};
+
+use super::{glsl_loader, RenderContext, Vertex, VERTICES};
 
 mod uniforms;
-
-pub struct RenderState {
-    size: winit::dpi::PhysicalSize<u32>,
-    frame_count: u32,
-}
-
-impl RenderState {
-    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
-        self.size
-    }
-}
 
 pub struct Raytracer {
     render_pipeline: wgpu::RenderPipeline,
     raytrace_uniforms: Uniforms,
-    camera_uniforms: CameraUniform,
     raytrace_uniform_buffer: wgpu::Buffer,
-    camera_uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     world_bind_group: wgpu::BindGroup,
-    render_state: RenderState,
     render_texture: Texture,
     render_texture_view: TextureView,
     world: Arc<Mutex<World>>,
@@ -44,11 +32,6 @@ impl Raytracer {
     ) -> Self {
         let size = context.window.inner_size();
 
-        let render_state = RenderState {
-            size,
-            frame_count: 0,
-        };
-
         let shaders;
 
         unsafe {
@@ -58,24 +41,14 @@ impl Raytracer {
 
         let (shader_vertex, shader_fragment) = shaders;
 
-        let raytrace_uniforms = Uniforms::new(world.clone(), &render_state).await;
-        let camera_uniforms = CameraUniform::new(world.clone(), &context).await;
+        let raytrace_uniforms = Uniforms::new(world.clone()).await;
 
         let raytrace_uniform_buffer =
             context
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Raytracing Uniforms"),
-                    contents: bytemuck::cast_slice(&[raytrace_uniforms]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-
-        let camera_uniform_buffer =
-            context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Camera Uniforms"),
-                    contents: bytemuck::cast_slice(&[camera_uniforms]),
+                    contents: bytemuck::cast_slice(raytrace_uniforms.as_std430().as_bytes()),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
@@ -86,16 +59,6 @@ impl Raytracer {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
                             visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
@@ -116,10 +79,6 @@ impl Raytracer {
                     wgpu::BindGroupEntry {
                         binding: 0,
                         resource: raytrace_uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: camera_uniform_buffer.as_entire_binding(),
                     },
                 ],
                 label: Some("uniform_bind_group"),
@@ -239,9 +198,11 @@ impl Raytracer {
                     },
                 });
 
+        let size = world_lock.player.as_ref().unwrap().camera.size;
+
         let render_texture_size = wgpu::Extent3d {
-            width: render_state.size.width,
-            height: render_state.size.height,
+            width: size.width,
+            height: size.height,
             depth_or_array_layers: 1,
         };
 
@@ -263,10 +224,7 @@ impl Raytracer {
             raytrace_uniforms,
             raytrace_uniform_buffer,
             uniform_bind_group,
-            render_state,
             world_bind_group,
-            camera_uniforms,
-            camera_uniform_buffer,
             render_texture,
             render_texture_view,
             world: world.clone(),
@@ -279,8 +237,6 @@ impl Raytracer {
         context: &RenderContext,
         vertex_buffer: &Buffer,
     ) {
-        self.render_state.frame_count += 1;
-
         self.update_uniform_data(&context).await; // uniform data must be kept up to date before rendering is performed
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -321,21 +277,11 @@ impl Raytracer {
     }
 
     async fn update_uniform_data(&mut self, context: &RenderContext) {
-        self.raytrace_uniforms
-            .update(self.world.clone(), &self.render_state)
-            .await;
-        self.camera_uniforms
-            .update(self.world.clone(), context)
-            .await;
+        self.raytrace_uniforms.update(self.world.clone()).await;
         context.queue.write_buffer(
             &self.raytrace_uniform_buffer,
             0,
-            bytemuck::cast_slice(&[self.raytrace_uniforms]),
-        );
-        context.queue.write_buffer(
-            &self.camera_uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[self.camera_uniforms]),
+            bytemuck::cast_slice(self.raytrace_uniforms.as_std430().as_bytes()),
         );
     }
 
@@ -349,8 +295,6 @@ impl Raytracer {
 
     #[deprecated] // TOOD; move into resize trait
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, context: &RenderContext) {
-        self.render_state.size = new_size;
-
         let render_texture_size = wgpu::Extent3d {
             width: new_size.width,
             height: new_size.height,

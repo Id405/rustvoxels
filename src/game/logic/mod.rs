@@ -2,10 +2,13 @@ use std::{rc::Rc, sync::Arc};
 
 use futures::lock::Mutex;
 use glam::Vec3;
+use winit::dpi::PhysicalSize;
 use winit::event::DeviceEvent;
 use winit::event::KeyboardInput;
 use winit::event::MouseButton;
 use winit::event::VirtualKeyCode::*;
+
+use crate::renderer::RenderContext;
 
 use self::keyboard_tracker::KeyboardTracker;
 
@@ -31,7 +34,11 @@ impl GameLogic {
 
             world_lock.player = Some(Player {
                 transform: Transform::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.5, 0.0, 0.0)),
-                camera: Camera { fov: 90.0 },
+                camera: Camera {
+                    fov: 90.0,
+                    size: PhysicalSize {width: 1, height: 1},
+                    frame_count: 0,
+                },
             });
         }
 

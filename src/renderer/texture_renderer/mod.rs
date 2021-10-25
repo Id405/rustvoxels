@@ -15,8 +15,8 @@ pub struct TextureRenderer {
     uniforms: Uniforms,
     uniforms_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
-    texture_bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout,
+    texture_bind_group: wgpu::BindGroup,
     size: PhysicalSize<u32>,
 }
 
@@ -182,8 +182,8 @@ impl TextureRenderer {
             uniforms,
             uniforms_buffer,
             uniform_bind_group,
-            texture_bind_group,
             size,
+            texture_bind_group,
             texture_bind_group_layout,
         }
     }
@@ -193,6 +193,7 @@ impl TextureRenderer {
         encoder: &mut wgpu::CommandEncoder,
         context: &RenderContext,
         vertex_buffer: &wgpu::Buffer,
+        render_texture_view: &wgpu::TextureView,
         surface_view: &wgpu::TextureView,
     ) {
         self.uniforms
@@ -217,22 +218,17 @@ impl TextureRenderer {
             depth_stencil_attachment: None,
         });
 
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
-        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        render_pass.draw(0..VERTICES.len() as u32, 0..1);
-    }
+        let render_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor { // TODO create const sampler
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
 
-    pub fn resize(
-        &mut self,
-        size: PhysicalSize<u32>,
-        render_texture_view: &wgpu::TextureView,
-        context: &RenderContext,
-    ) {
-        let render_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor::default());
 
-        self.size = size;
         self.texture_bind_group = context
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
@@ -249,5 +245,24 @@ impl TextureRenderer {
                 ],
                 label: Some("Render Texture Bind Group"),
             });
+
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.draw(0..VERTICES.len() as u32, 0..1);
+    }
+
+    pub fn resize(
+        &mut self,
+        size: PhysicalSize<u32>,
+        render_texture_view: &wgpu::TextureView,
+        context: &RenderContext,
+    ) {
+        let render_texture_sampler = context
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor::default());
+
+        self.size = size;
     }
 }

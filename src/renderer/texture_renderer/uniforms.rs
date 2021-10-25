@@ -6,7 +6,7 @@ pub struct Uniforms {
     resolution: IVec2,
 }
 
-impl Uniforms {
+impl Uniforms { //TODO use crevice for alignment
     pub async fn new(resolution: IVec2) -> Self {
         Self { resolution }
     }

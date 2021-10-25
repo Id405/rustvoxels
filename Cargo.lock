@@ -300,6 +300,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "crevice"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0388841c63d751d6444f5ebcf55bc98dde119e2a6547e7acda457cda3b36c55a"
+dependencies = [
+ "bytemuck",
+ "crevice-derive",
+ "mint",
+]
+
+[[package]]
+name = "crevice-derive"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d77417e514ad5c6d9ceb5e193c738db439a394ee7e602285feffc8dfc9bda7d0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "crossbeam"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -602,6 +624,9 @@ name = "glam"
 version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e01732b97afd8508eee3333a541b9f7610f454bb818669e66e90f5f57c93a776"
+dependencies = [
+ "mint",
+]
 
 [[package]]
 name = "glow"
@@ -848,6 +873,12 @@ name = "minimal-lexical"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6595bb28ed34f43c3fe088e48f6cfb2e033cab45f25a5384d5fdf564fbc8c4b2"
+
+[[package]]
+name = "mint"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "793e84ff3f9a63214a5475097fac2a3e3674f862efcaeabebf5f4da36d7512ec"
 
 [[package]]
 name = "mio"
@@ -1240,9 +1271,11 @@ name = "rustvoxels"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "crevice",
  "env_logger",
  "futures",
  "glam",
+ "mint",
  "naga",
  "shaderc",
  "wgpu",

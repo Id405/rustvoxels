@@ -1,5 +1,9 @@
+use winit::dpi::PhysicalSize;
+
 pub struct Camera {
     pub fov: f32,
+    pub size: PhysicalSize<u32>,
+    pub frame_count: u32,
 }
 
 impl Camera {

@@ -10,17 +10,14 @@ Order matters here, multi component values must be placed at a multiple of four
 */
 
 layout(set = 1, binding = 0, std430) uniform Raytrace {
+	mat4 world_matrix;
     ivec3 scene_size; // POSITION 0
-	int samples; // POSITION 3
     ivec2 resolution; // POSITION 4
+	int samples; // POSITION 3
     int frame_count; // POSITION 6
 	int max_steps;  // POSITION 7
     int octree_depth; // POSITION 8
     float focal_length; // POSITION 9
-};
-
-layout(set = 1, binding = 1) uniform Camera {
-	mat4 world_matrix;
 };
 
 layout(set = 0, binding = 0) uniform texture3D scene_texture;

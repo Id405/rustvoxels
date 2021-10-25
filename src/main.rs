@@ -40,10 +40,10 @@ fn main() {
                             game_logic.input_event(&InputEvent::Keyboard(*input)),
                         ),
                         WindowEvent::Resized(physical_size) => {
-                            renderer.resize(&context, *physical_size);
+                            futures::executor::block_on(renderer.resize(&context, *physical_size));
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            renderer.resize(&context, **new_inner_size);
+                            futures::executor::block_on(renderer.resize(&context, **new_inner_size));
                         }
                         _ => {}
                     }
@@ -54,7 +54,7 @@ fn main() {
                 match futures::executor::block_on(renderer.render(&context)) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SurfaceError::Lost) => renderer.resize(&context, renderer.size()),
+                    Err(wgpu::SurfaceError::Lost) => futures::executor::block_on(renderer.resize(&context, renderer.size())),
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame

@@ -6,10 +6,9 @@ use winit::{dpi::PhysicalSize, window};
 
 use crate::game::World;
 
-pub use common_uniforms::CameraUniform;
 pub use render_context::RenderContext;
 
-mod common_uniforms;
+mod denoiser;
 mod glsl_loader;
 mod raytracer;
 mod render_context;
@@ -69,6 +68,7 @@ pub struct Renderer {
     size: winit::dpi::PhysicalSize<u32>,
     vertex_buffer: wgpu::Buffer,
     raytracer: raytracer::Raytracer,
+    denoiser: denoiser::Denoiser,
     texture_renderer: texture_renderer::TextureRenderer,
     world: Arc<Mutex<World>>,
 }
@@ -95,7 +95,15 @@ impl Renderer {
 
         let raytracer = raytracer::Raytracer::new(context, world.clone(), &surface_config).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
-        let texture_renderer = texture_renderer::TextureRenderer::new(context, &surface_config, raytracer.render_texture_view()).await;
+        let denoiser =
+            denoiser::Denoiser::new(context, world.clone(), raytracer.render_texture()).await;
+
+        let texture_renderer = texture_renderer::TextureRenderer::new(
+            context,
+            &surface_config,
+            raytracer.render_texture_view(),
+        )
+        .await;
 
         let vertex_buffer = context
             .device
@@ -112,10 +120,18 @@ impl Renderer {
             raytracer,
             world,
             texture_renderer,
+            denoiser,
         }
     }
 
-    pub fn resize(&mut self, context: &RenderContext, new_size: winit::dpi::PhysicalSize<u32>) {
+    // ALl of this texture management is just terrible and annoying and needs to be restructured.
+    // Renderer structs shouldnt own their textures, and neither should the renderer. There should
+    // be a texture atlas struct holding Arc<Texture> (or maybe Arc<Mutex<Texture>> if neccessary?).
+    pub async fn resize(
+        &mut self,
+        context: &RenderContext,
+        new_size: winit::dpi::PhysicalSize<u32>,
+    ) {
         self.size = new_size;
         self.surface_config.width = new_size.width;
         self.surface_config.height = new_size.height;
@@ -123,8 +139,13 @@ impl Renderer {
             .surface
             .configure(&context.device, &self.surface_config);
 
+        self.world.lock().await.player.as_mut().unwrap().camera.size = new_size.clone();
+
         self.raytracer.resize(new_size, &context);
-        self.texture_renderer.resize(new_size, self.raytracer.render_texture_view(), &context);
+        self.denoiser
+            .resize(new_size, &self.raytracer.render_texture(), &context);
+        self.texture_renderer
+            .resize(new_size, self.denoiser.render_texture_view(), &context);
     }
 
     pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
@@ -149,11 +170,16 @@ impl Renderer {
             .render(&mut encoder, &context, &self.vertex_buffer)
             .await;
 
+        self.denoiser
+            .render(&mut encoder, &context, &self.vertex_buffer)
+            .await;
+
         self.texture_renderer
             .render(
                 &mut encoder,
                 &context,
                 &self.vertex_buffer,
+                &self.denoiser.render_texture_view(),
                 &frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default()),
@@ -163,10 +189,18 @@ impl Renderer {
         // submit will accept anything that implements IntoIter
         context.queue.submit(std::iter::once(encoder.finish()));
 
+        self.world
+            .lock()
+            .await
+            .player
+            .as_mut()
+            .unwrap()
+            .camera
+            .frame_count += 1;
+
         Ok(())
     }
 
-    fn render_texture(&self, context: &RenderContext, encoder: &CommandEncoder) {}
 
     pub fn size(&self) -> PhysicalSize<u32> {
         self.size
