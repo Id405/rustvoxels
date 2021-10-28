@@ -20,6 +20,8 @@ pub struct Raytracer {
     world_bind_group: wgpu::BindGroup,
     render_texture: Texture,
     render_texture_view: TextureView,
+    render_texture_depth: Texture,
+    render_texture_depth_view: TextureView,
     world: Arc<Mutex<World>>,
 }
 
@@ -56,18 +58,16 @@ impl Raytracer {
             context
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                    ],
+                        count: None,
+                    }],
                     label: Some("uniform_bind_group_layout"),
                 });
 
@@ -75,12 +75,10 @@ impl Raytracer {
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &uniform_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: raytrace_uniform_buffer.as_entire_binding(),
-                    },
-                ],
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: raytrace_uniform_buffer.as_entire_binding(),
+                }],
                 label: Some("uniform_bind_group"),
             });
 
@@ -175,11 +173,18 @@ impl Raytracer {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader_fragment,
                         entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                            blend: Some(wgpu::BlendState::REPLACE),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        targets: &[
+                            wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            },
+                            wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            },
+                        ],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -211,13 +216,26 @@ impl Raytracer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba32Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: Some("raytrace render attachment"),
         });
 
         let render_texture_view =
             render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let render_texture_depth = context.device.create_texture(&wgpu::TextureDescriptor {
+            size: render_texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: Some("raytrace render attachment"),
+        });
+
+        let render_texture_depth_view =
+            render_texture_depth.create_view(&wgpu::TextureViewDescriptor::default());
 
         Self {
             render_pipeline,
@@ -228,6 +246,8 @@ impl Raytracer {
             render_texture,
             render_texture_view,
             world: world.clone(),
+            render_texture_depth,
+            render_texture_depth_view: render_texture_depth_view,
         }
     }
 
@@ -241,19 +261,29 @@ impl Raytracer {
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Raytracer Render Pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: self.render_texture_view(),
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
-                        a: 1.0,
-                    }),
-                    store: true,
+            color_attachments: &[
+                wgpu::RenderPassColorAttachment {
+                    view: self.render_texture_view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
                 },
-            }],
+                wgpu::RenderPassColorAttachment {
+                    view: self.depth_texture_view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                },
+            ],
             depth_stencil_attachment: None,
         });
 
@@ -270,6 +300,14 @@ impl Raytracer {
 
     pub fn render_texture_view(&self) -> &TextureView {
         &self.render_texture_view
+    }
+
+    pub fn depth_texture(&self) -> &Texture {
+        &self.render_texture_depth
+    }
+
+    pub fn depth_texture_view(&self) -> &TextureView {
+        &self.render_texture_depth_view
     }
 
     fn render_pipeline(&self) -> &wgpu::RenderPipeline {
@@ -301,20 +339,32 @@ impl Raytracer {
             depth_or_array_layers: 1,
         };
 
-        let render_texture = context.device.create_texture(&wgpu::TextureDescriptor {
+        self.render_texture = context.device.create_texture(&wgpu::TextureDescriptor {
             size: render_texture_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba32Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: Some("raytrace render attachment"),
         });
 
-        let render_texture_view =
-            render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.render_texture_view = self
+            .render_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-        self.render_texture = render_texture;
-        self.render_texture_view = render_texture_view;
+        self.render_texture_depth = context.device.create_texture(&wgpu::TextureDescriptor {
+            size: render_texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: Some("raytrace render attachment"),
+        });
+
+        self.render_texture_depth_view = self
+            .render_texture_depth
+            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }

@@ -26,6 +26,8 @@ pub struct Denoiser {
     out_render_textures_views: (wgpu::TextureView, wgpu::TextureView),
     render_texture_view: wgpu::TextureView,
     render_texture_sampler: wgpu::Sampler,
+    depth_texture_view: wgpu::TextureView,
+    depth_texture_sampler: wgpu::Sampler,
     size: PhysicalSize<u32>,
     frame_count: u64,
 }
@@ -35,6 +37,7 @@ impl Denoiser {
         context: &RenderContext,
         world: Arc<Mutex<World>>,
         render_texture: &wgpu::Texture,
+        depth_texture: &wgpu::Texture,
     ) -> Self {
         let size = context.window.inner_size();
 
@@ -103,7 +106,7 @@ impl Denoiser {
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
                                 view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             },
                             count: None,
                         },
@@ -122,12 +125,31 @@ impl Denoiser {
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
                                 view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                comparison: false,
+                                filtering: true,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 5,
                             visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 comparison: false,
@@ -143,6 +165,18 @@ impl Denoiser {
             render_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let render_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let depth_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -176,8 +210,8 @@ impl Denoiser {
                         module: &shader_fragment,
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                            blend: Some(wgpu::BlendState::REPLACE),
+                            format: wgpu::TextureFormat::Rgba32Float,
+                            blend: None,
                             write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
@@ -204,7 +238,7 @@ impl Denoiser {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                format: wgpu::TextureFormat::Rgba32Float,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::RENDER_ATTACHMENT,
                 label: Some("raytrace render attachment"),
@@ -214,7 +248,7 @@ impl Denoiser {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                format: wgpu::TextureFormat::Rgba32Float,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::RENDER_ATTACHMENT,
                 label: Some("raytrace render attachment"),
@@ -243,6 +277,8 @@ impl Denoiser {
             render_texture_view,
             render_texture_sampler,
             frame_count: 0,
+            depth_texture_view,
+            depth_texture_sampler,
         }
     }
 
@@ -297,6 +333,14 @@ impl Denoiser {
                         binding: 3,
                         resource: wgpu::BindingResource::Sampler(&self.render_texture_sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&self.depth_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler),
+                    },
                 ],
                 label: Some("Denoising Texture Bind Group"),
             });
@@ -333,10 +377,14 @@ impl Denoiser {
         &mut self,
         size: PhysicalSize<u32>,
         render_texture: &wgpu::Texture,
+        depth_texture: &wgpu::Texture,
         context: &RenderContext,
     ) {
         self.render_texture_view =
             render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.depth_texture_view =
+            depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let texture_size = wgpu::Extent3d {
             width: size.width,
@@ -350,7 +398,7 @@ impl Denoiser {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                format: wgpu::TextureFormat::Rgba32Float,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::RENDER_ATTACHMENT,
                 label: Some("raytrace render attachment"),
@@ -360,7 +408,7 @@ impl Denoiser {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                format: wgpu::TextureFormat::Rgba32Float,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::RENDER_ATTACHMENT,
                 label: Some("raytrace render attachment"),

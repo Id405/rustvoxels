@@ -59,11 +59,10 @@ impl GameLogic {
         match event {
             InputEvent::Keyboard(key_event) => self.keyboard_state.input_event(key_event),
             InputEvent::Mouse(delta) => {
-                println!("{:?}", delta);
                 player.transform.add_rotation(Vec3::new(
-                    delta.1 as f32 * 0.00001,
+                    delta.1 as f32 * -0.0005,
                     0.0,
-                    delta.0 as f32 * 0.00001,
+                    delta.0 as f32 * -0.0005,
                 )); //TODO; configuration
             }
             InputEvent::MouseButton(_) => todo!(),

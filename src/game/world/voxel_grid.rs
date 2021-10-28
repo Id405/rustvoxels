@@ -1,5 +1,6 @@
 //TODO refactor this entire module
 use std::{borrow::Cow, convert::TryInto};
+use rayon::prelude::*;
 
 use crate::renderer::RenderContext;
 
@@ -210,6 +211,7 @@ impl VoxelGrid {
                     }
                 }
             }
+
             data.push(level_data);
         }
 

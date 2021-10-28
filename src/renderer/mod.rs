@@ -95,8 +95,13 @@ impl Renderer {
 
         let raytracer = raytracer::Raytracer::new(context, world.clone(), &surface_config).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
-        let denoiser =
-            denoiser::Denoiser::new(context, world.clone(), raytracer.render_texture()).await;
+        let denoiser = denoiser::Denoiser::new(
+            context,
+            world.clone(),
+            raytracer.render_texture(),
+            raytracer.depth_texture(),
+        )
+        .await;
 
         let texture_renderer = texture_renderer::TextureRenderer::new(
             context,
@@ -142,8 +147,12 @@ impl Renderer {
         self.world.lock().await.player.as_mut().unwrap().camera.size = new_size.clone();
 
         self.raytracer.resize(new_size, &context);
-        self.denoiser
-            .resize(new_size, &self.raytracer.render_texture(), &context);
+        self.denoiser.resize(
+            new_size,
+            &self.raytracer.render_texture(),
+            self.raytracer.depth_texture(),
+            &context,
+        );
         self.texture_renderer
             .resize(new_size, self.denoiser.render_texture_view(), &context);
     }
@@ -200,7 +209,6 @@ impl Renderer {
 
         Ok(())
     }
-
 
     pub fn size(&self) -> PhysicalSize<u32> {
         self.size

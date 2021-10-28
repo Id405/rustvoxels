@@ -3,21 +3,18 @@
 #extension GL_EXT_scalar_block_layout : require
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outDepth;
 
-/*
-Ok so UBO alignment in wgpu is absolutely evil.
-Order matters here, multi component values must be placed at a multiple of four
-*/
 
 layout(set = 1, binding = 0, std430) uniform Raytrace {
 	mat4 world_matrix;
-    ivec3 scene_size; // POSITION 0
-    ivec2 resolution; // POSITION 4
-	int samples; // POSITION 3
-    int frame_count; // POSITION 6
-	int max_steps;  // POSITION 7
-    int octree_depth; // POSITION 8
-    float focal_length; // POSITION 9
+    ivec3 scene_size;
+    ivec2 resolution;
+	int samples;
+    int frame_count;
+	int max_steps;
+    int octree_depth;
+    float focal_length;
 };
 
 layout(set = 0, binding = 0) uniform texture3D scene_texture;
@@ -124,13 +121,13 @@ vec4 trace(vec2 p) {
 
 	// Variables needed for the bounding box function
 	vec3 n;
-	vec2 res;
+	vec2 res = vec2(0);
 
 	if(!(insideBoundingBox(raypos, vec3(0), vec3(scene_size)))) {
 		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
 			raypos += raydir * res.x + n * 0.00001;
 		} else {
-			return vec4(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 1.0); // Return fully lit scene
+			return vec4(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 0.0); // Return fully lit scene
 		} //TODO normal data is not needed
 	}
 
@@ -232,7 +229,7 @@ vec4 trace(vec2 p) {
 	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), 1.0); // Return fully lit scene
+	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 
@@ -249,11 +246,12 @@ void mainImage(in vec2 fragCoord )
 		p.y = resolution.y - p.y; // Flip image vertically because ofFbo flips images vertically for some reason
 		vec4 col = trace(p);
 
-		color += vec4(col.rgb, 1.0); // Accumulate color average
+		color += col; // Accumulate color average
 	}
 
 	color /= float(samples); // Average color
-	outColor = color;
+	outColor = vec4(color.rgb, 1.0);
+	outDepth = vec4(color.a)/10000;
 	// gl_FragDepth /= float(samples); // Average depth
 	//outNormal = vec4(1.0, 0.0, 0.0, 1.0);
 }
