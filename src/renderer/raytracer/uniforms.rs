@@ -61,8 +61,5 @@ impl Uniforms {
         self.max_steps = 200; // TODO; config refactor
         self.samples = 10; // TODO; config refactor
         self.camera_matrix = player.transform.as_matrix().into();
-        if self.frame_count % 60 == 0 {
-            println!("{:?}", self);
-        }
     }
 }

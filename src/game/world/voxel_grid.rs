@@ -1,6 +1,6 @@
 //TODO refactor this entire module
-use std::{borrow::Cow, convert::TryInto};
 use rayon::prelude::*;
+use std::{borrow::Cow, convert::TryInto};
 
 use crate::renderer::RenderContext;
 
@@ -83,7 +83,7 @@ impl VoxelGrid {
     fn grid_position(pos: [usize; 3], size: (usize, usize, usize)) -> usize {
         let (x, z, y) = (pos[0], pos[1], pos[2]);
         let (width, height, length) = size;
-        ((x + width * y) + z * width * length) * 4
+        (x + (width * y) + (z * width * length)) * 4
     }
 
     fn set_voxel(&mut self, pos: [usize; 3], color: [u8; 4], render_context: &RenderContext) {
@@ -149,68 +149,70 @@ impl VoxelGrid {
                 self.height / div_factor,
                 self.length / div_factor,
             );
-            let mut level_data = vec![0.0; width * height * length * 4];
 
-            for x in 0..width {
-                for z in 0..height {
-                    for y in 0..length {
-                        let pos = [x, z, y];
-                        let mut values: Vec<Vec<_>> = Vec::new();
+            let level_data = vec![(0.0, 0.0, 0.0, 0.0); width * height * length]
+                .par_iter()
+                .enumerate()
+                .map(|(index, &(_, _, _, _))| {
+                    let z = index / (width * length);
+                    let y = (index % (width * length)) / (width);
+                    let x = (index % (width * length)) % width;
 
-                        for dx in 0..3 {
-                            for dz in 0..3 {
-                                for dy in 0..3 {
-                                    let mut dpos = pos.map(|x| x * 2);
-                                    dpos = [
-                                        ((dpos[0] + dx) as isize - 1).max(0) as usize,
-                                        ((dpos[1] + dy) as isize - 1).max(0) as usize,
-                                        ((dpos[2] + dz) as isize - 1).max(0) as usize,
-                                    ];
+                    let pos = [x, z, y];
 
-                                    let p = Self::grid_position(
-                                        dpos,
-                                        (width * 2, height * 2, length * 2),
-                                    );
+                    let mut values: Vec<Vec<_>> = Vec::new();
 
-                                    values.push(
-                                        data[level - 1][p..p + 4].to_vec().try_into().unwrap(),
-                                    );
-                                }
+                    for dx in 0..3 {
+                        for dz in 0..3 {
+                            for dy in 0..3 {
+                                let mut dpos = pos.map(|x| x * 2);
+                                dpos = [
+                                    ((dpos[0] + dx) as isize - 1).max(0) as usize,
+                                    ((dpos[1] + dy) as isize - 1).max(0) as usize,
+                                    ((dpos[2] + dz) as isize - 1).max(0) as usize,
+                                ];
+
+                                let p =
+                                    Self::grid_position(dpos, (width * 2, height * 2, length * 2));
+
+                                values.push(data[level - 1][p..p + 4].to_vec().try_into().unwrap());
                             }
                         }
-
-                        // if values.filter(|x| x[3] != 0)
-
-                        let mut count = 0;
-                        let sum: [f32; 4] = values.iter().fold([0.0; 4], |mut sum, val| {
-                            if val[3] != 0.0 {
-                                for i in 0..3 {
-                                    sum[i] += val[i];
-                                }
-                                count += 1;
-                            }
-
-                            sum[3] += val[3];
-
-                            sum
-                        });
-
-                        let average = [
-                            sum[0] / count as f32,
-                            sum[1] / count as f32,
-                            sum[2] / count as f32,
-                            sum[3] / values.len() as f32,
-                        ];
-
-                        let p = Self::grid_position(pos, (width, height, length));
-
-                        let slice = &mut level_data[p..p + 4];
-                        slice.iter_mut().enumerate().for_each(|(i, v)| {
-                            *v = (average[i] as f32) / 255.0;
-                        });
                     }
-                }
-            }
+
+                    // if values.filter(|x| x[3] != 0)
+
+                    let mut count = 0;
+                    let sum: [f32; 4] = values.iter().fold([0.0; 4], |mut sum, val| {
+                        if val[3] != 0.0 {
+                            for i in 0..3 {
+                                sum[i] += val[i];
+                            }
+                            count += 1;
+                        }
+
+                        sum[3] += val[3];
+
+                        sum
+                    });
+
+                    let average = [
+                        sum[0] / count as f32,
+                        sum[1] / count as f32,
+                        sum[2] / count as f32,
+                        sum[3] / values.len() as f32,
+                    ];
+
+                    average
+                })
+                .collect::<Vec<_>>()
+                .iter()
+                .fold(Vec::new(), |mut vec, x| {
+                    x.iter().for_each(|x| {
+                        vec.push(*x);
+                    });
+                    vec
+                });
 
             data.push(level_data);
         }

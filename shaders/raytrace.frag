@@ -155,6 +155,8 @@ vec4 trace(vec2 p) {
 	vec3 outColor = vec3(1);
 	float depth = 0;
 
+	float hit = 0;
+
 	for(int i=0; i<max_steps; i++) { // Begin marching the ray now
 		if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
 			// return vec4(vec3(float(i)/float(4)), 1.0);
@@ -182,6 +184,7 @@ vec4 trace(vec2 p) {
 
 				if(depth == 0) { // Update the depth variable to store the distance to the first intersection with the scene geometry
 					depth = dist;
+					hit = 1;
 					// outNormal = vec4(normal, 1.0);
 				}
 
@@ -229,7 +232,7 @@ vec4 trace(vec2 p) {
 	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), depth + res.x); // Return fully lit scene
+	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), (depth + res.x) * hit); // Return fully lit scene
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 

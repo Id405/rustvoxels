@@ -15,6 +15,101 @@ use super::{RenderContext, Vertex, VERTICES};
 
 mod uniforms;
 
+pub struct TextureSwapChain {
+    pub textures: (wgpu::Texture, wgpu::Texture),
+    pub texture_views: (wgpu::TextureView, wgpu::TextureView),
+}
+
+impl TextureSwapChain {
+    pub fn new(context: &RenderContext, texture_size: &wgpu::Extent3d) -> Self {
+        let textures = (
+            context.device.create_texture(&wgpu::TextureDescriptor {
+                size: texture_size.clone(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                label: Some("raytrace render attachment"),
+            }),
+            context.device.create_texture(&wgpu::TextureDescriptor {
+                size: texture_size.clone(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                label: Some("raytrace render attachment"),
+            }),
+        );
+
+        let texture_views = (
+            textures
+                .0
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+            textures
+                .1
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+        );
+
+        Self {
+            textures,
+            texture_views,
+        }
+    }
+
+    pub fn texture_view(&self, frame_count: u64) -> &wgpu::TextureView {
+        // TODO; check to make sure this returns the correct, most recently rendered texture view.
+        match frame_count % 2 == 0 {
+            true => &self.texture_views.1,
+            false => &self.texture_views.0,
+        }
+    }
+
+    pub fn texture_views(&self, frame_count: u64) -> (&wgpu::TextureView, &wgpu::TextureView) {
+        match frame_count % 2 == 0 {
+            true => (&self.texture_views.0, &self.texture_views.1),
+            false => (&self.texture_views.1, &self.texture_views.0),
+        }
+    }
+
+    pub fn resize(&mut self, context: &RenderContext, texture_size: &wgpu::Extent3d) {
+        self.textures = (
+            context.device.create_texture(&wgpu::TextureDescriptor {
+                size: texture_size.clone(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                label: Some("raytrace render attachment"),
+            }),
+            context.device.create_texture(&wgpu::TextureDescriptor {
+                size: texture_size.clone(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                label: Some("raytrace render attachment"),
+            }),
+        );
+
+        self.texture_views = (
+            self.textures
+                .0
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+            self.textures
+                .1
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+        );
+    }
+}
+
 pub struct Denoiser {
     world: Arc<Mutex<World>>,
     render_pipeline: wgpu::RenderPipeline,
@@ -22,8 +117,8 @@ pub struct Denoiser {
     uniforms_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    out_render_textures: (wgpu::Texture, wgpu::Texture),
-    out_render_textures_views: (wgpu::TextureView, wgpu::TextureView),
+    out_render_texture_swapchain: TextureSwapChain,
+    out_depth_texture_swapchain: TextureSwapChain,
     render_texture_view: wgpu::TextureView,
     render_texture_sampler: wgpu::Sampler,
     depth_texture_view: wgpu::TextureView,
@@ -95,6 +190,10 @@ impl Denoiser {
             depth_or_array_layers: 1,
         };
 
+        let out_render_texture_swapchain = TextureSwapChain::new(&context, &texture_size);
+
+        let out_depth_texture_swapchain = TextureSwapChain::new(&context, &texture_size);
+
         let texture_bind_group_layout =
             context
                 .device
@@ -157,6 +256,25 @@ impl Denoiser {
                             },
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 6,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 7,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                comparison: false,
+                                filtering: true,
+                            },
+                            count: None,
+                        },
                     ],
                     label: Some("Denoising Renderer Texture Bind Group Layout"),
                 });
@@ -209,11 +327,18 @@ impl Denoiser {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader_fragment,
                         entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Rgba32Float,
-                            blend: None,
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        targets: &[
+                            wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            },
+                            wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            },
+                        ],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -232,38 +357,6 @@ impl Denoiser {
                     },
                 });
 
-        let out_render_textures = (
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-        );
-
-        let out_render_textures_views = (
-            out_render_textures
-                .0
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-            out_render_textures
-                .1
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-        );
-
         Self {
             world,
             render_pipeline,
@@ -272,13 +365,13 @@ impl Denoiser {
             uniform_bind_group,
             size,
             texture_bind_group_layout,
-            out_render_textures,
-            out_render_textures_views,
             render_texture_view,
             render_texture_sampler,
             frame_count: 0,
             depth_texture_view,
             depth_texture_sampler,
+            out_render_texture_swapchain,
+            out_depth_texture_swapchain,
         }
     }
 
@@ -298,17 +391,13 @@ impl Denoiser {
             bytemuck::cast_slice(self.uniforms.as_std430().as_bytes()),
         );
 
-        let (past_render_texture_view_sample, past_render_texture_view_attachment) =
-            match self.frame_count % 2 == 0 {
-                true => (
-                    &self.out_render_textures_views.0,
-                    &self.out_render_textures_views.1,
-                ),
-                false => (
-                    &self.out_render_textures_views.1,
-                    &self.out_render_textures_views.0,
-                ),
-            };
+        let (past_render_texture_view_sample, past_render_texture_view_attachment) = self
+            .out_render_texture_swapchain
+            .texture_views(self.frame_count);
+
+        let (past_depth_texture_view_sample, past_depth_texture_view_attachment) = self
+            .out_depth_texture_swapchain
+            .texture_views(self.frame_count);
 
         let texture_bind_group = context
             .device
@@ -341,6 +430,14 @@ impl Denoiser {
                         binding: 5,
                         resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(past_depth_texture_view_sample)
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler)
+                    }
                 ],
                 label: Some("Denoising Texture Bind Group"),
             });
@@ -349,19 +446,34 @@ impl Denoiser {
             // TODO proceed to copy the rendered texture to a new texture representing only the most recently rendered texture for texture view to use
             // Or have texture renderer update its texture every frames
             label: Some("Render Pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: past_render_texture_view_attachment,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.3,
-                        a: 1.0,
-                    }),
-                    store: true,
+            color_attachments: &[
+                wgpu::RenderPassColorAttachment {
+                    view: past_render_texture_view_attachment,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 1.0,
+                            g: 0.8,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
                 },
-            }],
+                wgpu::RenderPassColorAttachment {
+                    view: past_depth_texture_view_attachment,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 1.0,
+                            g: 1.0,
+                            b: 1.0,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                },
+            ],
             depth_stencil_attachment: None,
         });
 
@@ -392,50 +504,24 @@ impl Denoiser {
             depth_or_array_layers: 1,
         };
 
-        self.out_render_textures = (
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-        );
-
-        self.out_render_textures_views = (
-            self.out_render_textures
-                .0
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-            self.out_render_textures
-                .1
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-        );
+        self.out_depth_texture_swapchain
+            .resize(&context, &texture_size);
+        self.out_render_texture_swapchain
+            .resize(&context, &texture_size);
 
         self.size = size;
     }
 
     pub fn render_textures(&self) -> (&wgpu::Texture, &wgpu::Texture) {
-        (&self.out_render_textures.0, &self.out_render_textures.1)
+        (
+            &self.out_render_texture_swapchain.textures.0,
+            &self.out_render_texture_swapchain.textures.1,
+        )
     }
 
     pub fn render_texture_view(&self) -> &wgpu::TextureView {
         // TODO; check to make sure this returns the correct, most recently rendered texture view.
-        match self.frame_count % 2 == 0 {
-            true => &self.out_render_textures_views.1,
-            false => &self.out_render_textures_views.0,
-        }
+        self.out_render_texture_swapchain
+            .texture_view(self.frame_count)
     }
 }
