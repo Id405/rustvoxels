@@ -22,7 +22,7 @@ layout (set=1, binding=0, std430) uniform Uniforms {
     int frame_count;
 };
 
-#define repro_percent 0.90
+#define repro_percent 0.50
 
 void main() {
     // outColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), gl_FragCoord.xy/vec2(resolution)) * vec4(1.0 - 0.90)
@@ -37,14 +37,16 @@ void main() {
 
     // Get the freshly rendered color and depth information
     vec4 renderedFrameColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), gl_FragCoord.xy/vec2(resolution));
-    float renderedFrameDepthFloat = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), gl_FragCoord.xy/vec2(resolution)).r*10000;
+    vec4 renderedFrameDepthNormals = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), gl_FragCoord.xy/vec2(resolution));
+    float renderedFrameDepth = renderedFrameDepthNormals.a*10000;
+    vec3 renderedFrameNormal = renderedFrameDepthNormals.rgb;
 
     // Setup a raycast to find the worldspace position of the current pixel
     vec2 s = vec2((gl_FragCoord.x) - resolution.x/2.0f, (resolution.y - gl_FragCoord.y) - resolution.y/2.0f);
-	vec3 raypos = (camera_matrix * vec4(0, 0, 0, 1)).xyz; //TODO precompute these values
+	vec3 raypos = (camera_matrix * vec4(0, 0, 0, 1)).xyz; 
 	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
 	raydir = (camera_matrix * vec4(raydir, 0.0)).xyz;
-    vec3 worldSpacePosition = raypos + raydir * renderedFrameDepthFloat;
+    vec3 worldSpacePosition = raypos + raydir * renderedFrameDepth;
 
     // Then transform that world space position into a camera space position for the last frame
     vec3 cameraSpacePosition = (invPastCameraMatrix * vec4(worldSpacePosition, 1.0)).xyz;
@@ -58,7 +60,9 @@ void main() {
     // Then get the color of that pixel
     // vec4 pastFrameColor = texelFetch(pastFrame, ivec2(prevUV * resolution), 0);
     vec4 pastFrameColor = texture(sampler2D(past_frame_texture, past_frame_sampler), prevUV);
-    float pastFrameDepth = texture(sampler2D(past_frame_depth_texture, past_frame_depth_sampler), prevUV).a*10000;
+    vec4 pastFrameDepthNormals = texture(sampler2D(past_frame_depth_texture, past_frame_depth_sampler), prevUV);
+    float pastFrameDepth = pastFrameDepthNormals.a*10000;
+    vec3 pastFrameNormal = pastFrameDepthNormals.rgb;
     // pastFrameColor.rgb = pow(pastFrameColor.rgb, vec3(2.2)); // Reverse the srgb color transform applied to it
 
     // If the camera space coordinate is outside of the previous frame then reject it.
@@ -67,7 +71,7 @@ void main() {
     }
 
     // Don't reproject the sky
-    if(renderedFrameDepthFloat == 0.0) {
+    if(renderedFrameDepth == 0.0) {
         reprojectionPercentWeighted = 0.0;
         pastFrameDepth = 0.0;
     }
@@ -76,15 +80,19 @@ void main() {
         reprojectionPercentWeighted = 0.0;
     }
 
+    if(pastFrameNormal != renderedFrameNormal) {
+        reprojectionPercentWeighted = 0.0;
+    }
+
     // Finally average out the depth and color information
     outColor = renderedFrameColor * (1.0 - reprojectionPercentWeighted) + pastFrameColor * reprojectionPercentWeighted;
-    outDepth = vec4(renderedFrameDepthFloat/10000);
-    // outColor = vec4(pastFrameDepth/10000);
+    outDepth = renderedFrameDepthNormals;
+    // outColor = vec4(renderedFrameNormal, 1.0);
 
     // Uncomment this code to render once a second and extrapolate between frames
     // if(frameCount % 60 == 0) {
     //     outColor = renderedFrameColor;
-    //     gl_FragDepth = renderedFrameDepthFloat/10000;
+    //     gl_FragDepth = renderedFrameDepth/10000;
     // } else {
     //     outColor = pastFrameColor;
     //     if(pastFrameColor.a < 0.1 || reprojectionPercentWeighted < 0.1) {
@@ -96,7 +104,7 @@ void main() {
     // outColor = pow(outColor, vec4(vec3(1.0/2.2), 1.0));
 
     // outColor = vec4(vec3(prevUV, 0.0), 1.0);
-    outColor = vec4(vec3(ivec3(floor(worldSpacePosition)) % ivec3(2.0)), 1.0);
+    // outColor = vec4(vec3(ivec3(floor(worldSpacePosition)) % ivec3(2.0)), 1.0);
     // outColor = vec4(vec3(abs(minDepthDistance)), 1.0);
     // outColor = vec4(vec3(length(abs(prevUV-textureCoordinate)) * 20), 1.0);
     // outColor = vec4(vec3(prevUV, 0.0), 1.0);

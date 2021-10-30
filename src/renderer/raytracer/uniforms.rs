@@ -19,7 +19,6 @@ pub struct Uniforms {
 }
 
 impl Uniforms {
-    // TODO; uniforms trait
     pub async fn new(world: Arc<Mutex<World>>) -> Self {
         let mut uniforms = Self {
             scene_size: mint::Vector3 { x: 0, y: 0, z: 0 },

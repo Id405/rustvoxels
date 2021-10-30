@@ -26,7 +26,6 @@ pub struct Raytracer {
 }
 
 impl Raytracer {
-    // TODO; renderable trait
     pub async fn new(
         context: &RenderContext,
         world: Arc<Mutex<World>>,
@@ -287,7 +286,7 @@ impl Raytracer {
             depth_stencil_attachment: None,
         });
 
-        render_pass.set_pipeline(self.render_pipeline()); // TODO: rendering structs take control of their own swap chain and are interacted with through a RenderStruct trait
+        render_pass.set_pipeline(self.render_pipeline());
         render_pass.set_bind_group(1, self.uniform_bind_group(), &[]);
         render_pass.set_bind_group(0, self.world_bind_group(), &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));

@@ -20,7 +20,7 @@ layout(set = 1, binding = 0, std430) uniform Raytrace {
 layout(set = 0, binding = 0) uniform texture3D scene_texture;
 
 
-#define SKYCOLOR vec3(0.9) 
+#define SKYCOLOR vec3(0.9)
 #define SUNCOLOR vec3(192.0/255.0, 191.0/255.0, 173.0/255.0)
 #define LIGHTCOLOR vec3(5, 0, 0)
 #define LIGHTDIR vec3(0.0, 0.0, 1.0)
@@ -110,15 +110,14 @@ vec3 getColor(ivec3 c, int l) {
 	return texelFetch(scene_texture, clamp(c, ivec3(0), scene_size), l).rgb;
 }
 
-// The main raytracing function, the alpha channel of the vec4 that is returned is the depth
-vec4 trace(vec2 p) {
-	// Setup the Ray Position and Direction given the camera transformation matrix
-	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
-	vec3 raypos = vec3(world_matrix * vec4(0.0, 0.0, 0.0, 1.0));
-	// vec3 raypos = vec3(0.1, 0.0, 0.0);
-	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
-	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
+struct Hit {
+	vec3 color;
+	float depth;
+	vec3 normal;
+};
 
+// The main raytracing function, the alpha channel of the vec4 that is returned is the depth
+Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 	// Variables needed for the bounding box function
 	vec3 n;
 	vec2 res = vec2(0);
@@ -127,8 +126,8 @@ vec4 trace(vec2 p) {
 		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
 			raypos += raydir * res.x + n * 0.00001;
 		} else {
-			return vec4(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 0.0); // Return fully lit scene
-		} //TODO normal data is not needed
+			return Hit(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 0.0, vec3(0, 0, 0)); // Return fully lit scene
+		}
 	}
 
 	int maxLevel = octree_depth-1;
@@ -152,7 +151,7 @@ vec4 trace(vec2 p) {
 	int steps = 0;
 
 	vec3 luminance = vec3(0);
-	vec3 outColor = vec3(1);
+	vec3 color_out = vec3(1);
 	float depth = 0;
 
 	float hit = 0;
@@ -176,16 +175,19 @@ vec4 trace(vec2 p) {
 			}
 
 			if(level == 0 && nonEmpty) { // If we are at the lowest level and hit a non empty grid position that means we hit scene geometry and we can scatter the ray off of it
-				// return vec4(getColor(gridPosition >> level, level), 1.0); // uncomment to disable lighting
 				// return vec4(vec3(complexity/(maxLevel)), 1); // Return complexity map
 
-				outColor *= getColor(gridPosition >> level, level);
+				color_out *= getColor(gridPosition >> level, level);
 				// outColor *= 0.5; // Disable color and only view lighting
 
 				if(depth == 0) { // Update the depth variable to store the distance to the first intersection with the scene geometry
 					depth = dist;
 					hit = 1;
 					// outNormal = vec4(normal, 1.0);
+				}
+
+				if (primary) {
+					return Hit(getColor(gridPosition >> level, level), depth + res.x, normal);
 				}
 
 				modifiedRayPosition += normal * 0.01; // Step off of the scene geometry slightly to avoid getting stuck inside of it
@@ -232,7 +234,7 @@ vec4 trace(vec2 p) {
 	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return vec4(outColor * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), (depth + res.x) * hit); // Return fully lit scene
+	return Hit(color_out * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), (depth + res.x) * hit, normal); // Return fully lit scene
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 
@@ -243,20 +245,35 @@ void mainImage(in vec2 fragCoord )
 
 	vec4 color = vec4(0.0);
 
-	// Render the scenes samples
-	for(int i=0; i < samples; i++) {
-		vec2 p = fragCoord;
-		p.y = resolution.y - p.y; // Flip image vertically because ofFbo flips images vertically for some reason
-		vec4 col = trace(p);
+	vec2 p = fragCoord;
+	p.y = resolution.y - p.y; // Flip image vertically because ofFbo flips images vertically for some reason
 
-		color += col; // Accumulate color average
+	// Setup the Ray Position and Direction given the camera transformation matrix
+	vec2 s = vec2(p.x - float(resolution.x)/2.0f, p.y - float(resolution.y)/2.0f);
+	vec3 raypos = vec3(world_matrix * vec4(0.0, 0.0, 0.0, 1.0));
+	// vec3 raypos = vec3(0.1, 0.0, 0.0);
+	vec3 raydir = normalize(vec3(s.x/resolution.y, focal_length, s.y/resolution.y));
+	raydir = (world_matrix * vec4(raydir, 0.0)).xyz;
+
+	Hit primary = trace(raydir, raypos, true);
+
+	raypos += raydir * (primary.depth - 0.01);
+
+	if (primary.depth != 0.0) {
+	// Render the scenes samples
+		for(int i=0; i < samples; i++) {
+			Hit diffuse = trace(raydir, raypos, false);
+
+			color += vec4(diffuse.color, 1.0); // Accumulate color average
+		}
+		color /= float(samples); // Average color
+	} else { // sky color
+		color = vec4(primary.color, 1.0);
 	}
 
-	color /= float(samples); // Average color
 	outColor = vec4(color.rgb, 1.0);
-	outDepth = vec4(color.a)/10000;
-	// gl_FragDepth /= float(samples); // Average depth
-	//outNormal = vec4(1.0, 0.0, 0.0, 1.0);
+	// outColor = vec4(vec3(primary.depth/128), 1.0);
+	outDepth = vec4(primary.normal, primary.depth/10000);
 }
 
 void main() {

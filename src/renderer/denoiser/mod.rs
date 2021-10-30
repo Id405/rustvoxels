@@ -443,8 +443,6 @@ impl Denoiser {
             });
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            // TODO proceed to copy the rendered texture to a new texture representing only the most recently rendered texture for texture view to use
-            // Or have texture renderer update its texture every frames
             label: Some("Render Pass"),
             color_attachments: &[
                 wgpu::RenderPassColorAttachment {
@@ -484,7 +482,7 @@ impl Denoiser {
         render_pass.draw(0..VERTICES.len() as u32, 0..1);
     }
 
-    // TODO I really badly need a resize trait, and then textures can be registered to be resized/updated on window resize
+    // TODO I really badly need a resize trait, and then textures can be registered to be resized/updated on window resize + tie into texture atlas struct
     pub fn resize(
         &mut self,
         size: PhysicalSize<u32>,
