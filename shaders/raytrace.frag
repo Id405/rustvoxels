@@ -234,7 +234,8 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return Hit(color_out * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), (depth + res.x) * hit, normal); // Return fully lit scene
+	return Hit(color_out * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), (depth + res.x) * hit, normal * hit); // Return fully lit scene
+	// return Hit(color_out, (depth + res.x) * hit, normal * hit);
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
 

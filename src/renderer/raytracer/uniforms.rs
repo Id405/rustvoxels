@@ -58,7 +58,7 @@ impl Uniforms {
         ).into();
         self.octree_depth = voxel_grid.get_mip_levels() as i32;
         self.max_steps = 200; // TODO; config refactor
-        self.samples = 10; // TODO; config refactor
+        self.samples = 5; // TODO; config refactor
         self.camera_matrix = player.transform.as_matrix().into();
     }
 }

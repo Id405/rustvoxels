@@ -432,12 +432,14 @@ impl Denoiser {
                     },
                     wgpu::BindGroupEntry {
                         binding: 6,
-                        resource: wgpu::BindingResource::TextureView(past_depth_texture_view_sample)
+                        resource: wgpu::BindingResource::TextureView(
+                            past_depth_texture_view_sample,
+                        ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 7,
-                        resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler)
-                    }
+                        resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler),
+                    },
                 ],
                 label: Some("Denoising Texture Bind Group"),
             });

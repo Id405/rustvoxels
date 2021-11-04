@@ -22,7 +22,7 @@ layout (set=1, binding=0, std430) uniform Uniforms {
     int frame_count;
 };
 
-#define repro_percent 0.50
+#define repro_percent 0.90
 
 void main() {
     // outColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), gl_FragCoord.xy/vec2(resolution)) * vec4(1.0 - 0.90)
@@ -36,10 +36,101 @@ void main() {
     float reprojectionPercentWeighted = repro_percent;
 
     // Get the freshly rendered color and depth information
-    vec4 renderedFrameColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), gl_FragCoord.xy/vec2(resolution));
-    vec4 renderedFrameDepthNormals = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), gl_FragCoord.xy/vec2(resolution));
+    vec4 renderedFrameColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), textureCoordinate);
+    vec4 renderedFrameDepthNormals = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), textureCoordinate);
     float renderedFrameDepth = renderedFrameDepthNormals.a*10000;
     vec3 renderedFrameNormal = renderedFrameDepthNormals.rgb;
+
+    // from https://www.shadertoy.com/view/ldKBzG
+    vec2 offset[25];
+    offset[0] = vec2(-2,-2);
+    offset[1] = vec2(-1,-2);
+    offset[2] = vec2(0,-2);
+    offset[3] = vec2(1,-2);
+    offset[4] = vec2(2,-2);
+    
+    offset[5] = vec2(-2,-1);
+    offset[6] = vec2(-1,-1);
+    offset[7] = vec2(0,-1);
+    offset[8] = vec2(1,-1);
+    offset[9] = vec2(2,-1);
+    
+    offset[10] = vec2(-2,0);
+    offset[11] = vec2(-1,0);
+    offset[12] = vec2(0,0);
+    offset[13] = vec2(1,0);
+    offset[14] = vec2(2,0);
+    
+    offset[15] = vec2(-2,1);
+    offset[16] = vec2(-1,1);
+    offset[17] = vec2(0,1);
+    offset[18] = vec2(1,1);
+    offset[19] = vec2(2,1);
+    
+    offset[20] = vec2(-2,2);
+    offset[21] = vec2(-1,2);
+    offset[22] = vec2(0,2);
+    offset[23] = vec2(1,2);
+    offset[24] = vec2(2,2);
+    
+    
+    float kernel[25];
+    kernel[0] = 1.0f/256.0f;
+    kernel[1] = 1.0f/64.0f;
+    kernel[2] = 3.0f/128.0f;
+    kernel[3] = 1.0f/64.0f;
+    kernel[4] = 1.0f/256.0f;
+    
+    kernel[5] = 1.0f/64.0f;
+    kernel[6] = 1.0f/16.0f;
+    kernel[7] = 3.0f/32.0f;
+    kernel[8] = 1.0f/16.0f;
+    kernel[9] = 1.0f/64.0f;
+    
+    kernel[10] = 3.0f/128.0f;
+    kernel[11] = 3.0f/32.0f;
+    kernel[12] = 9.0f/64.0f;
+    kernel[13] = 3.0f/32.0f;
+    kernel[14] = 3.0f/128.0f;
+    
+    kernel[15] = 1.0f/64.0f;
+    kernel[16] = 1.0f/16.0f;
+    kernel[17] = 3.0f/32.0f;
+    kernel[18] = 1.0f/16.0f;
+    kernel[19] = 1.0f/64.0f;
+    
+    kernel[20] = 1.0f/256.0f;
+    kernel[21] = 1.0f/64.0f;
+    kernel[22] = 3.0f/128.0f;
+    kernel[23] = 1.0f/64.0f;
+    kernel[24] = 1.0f/256.0f;
+    
+    vec4 sum = vec4(0.0);   
+    float cumulative_weight = 0.0;
+
+    for(int i=0; i<25; i++)
+    { 
+        vec2 offset = offset[i]*1.5;
+        vec2 uv = (gl_FragCoord.xy+offset)/resolution;
+
+        vec4 localFrameColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), uv);
+        vec4 delta = renderedFrameColor - localFrameColor;
+        float dist2 = dot(delta,delta);
+        float color_weight = min(exp(-(dist2)), 1.0);
+        
+        vec4 localFrameNormal = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), uv);
+        delta = (renderedFrameDepthNormals - localFrameNormal) * vec4(1.0, 1.0, 1.0, 10000);
+        // delta = (renderedFrameDepthNormals + vec4(1.0, 1.0, 1.0, 0.0)) - (localFrameNormal + vec4(1.0, 1.0, 1.0, 0.0));
+        dist2 = max(dot(delta, delta), 0.0);
+        float normal_weight = min(exp(-(dist2)), 1.0);
+        
+        // float weight = color_weight*normal_weight;
+        float weight = normal_weight;
+        sum += localFrameColor*weight*kernel[i];
+        cumulative_weight += weight*kernel[i];
+    }
+
+    renderedFrameColor = sum/cumulative_weight;
 
     // Setup a raycast to find the worldspace position of the current pixel
     vec2 s = vec2((gl_FragCoord.x) - resolution.x/2.0f, (resolution.y - gl_FragCoord.y) - resolution.y/2.0f);
@@ -84,13 +175,20 @@ void main() {
         reprojectionPercentWeighted = 0.0;
     }
 
+    if(abs(pastFrameDepth - renderedFrameDepth) > 1.0) {
+        reprojectionPercentWeighted = 0.0;
+    }
+
     // Finally average out the depth and color information
     outColor = renderedFrameColor * (1.0 - reprojectionPercentWeighted) + pastFrameColor * reprojectionPercentWeighted;
     outDepth = renderedFrameDepthNormals;
+    // outColor = vec4(vec3(cumulative_weight), 1.0);
+    // outColor = vec4(vec3(dot(vec3(camera_matrix[0][2], camera_matrix[1][2], camera_matrix[2][2]), abs(renderedFrameNormal))), 1.0);
+    // outColor = renderedFrameDepthNormals;
     // outColor = vec4(renderedFrameNormal, 1.0);
 
     // Uncomment this code to render once a second and extrapolate between frames
-    // if(frameCount % 60 == 0) {
+    // if(frameCount % 60 == 0) { 
     //     outColor = renderedFrameColor;
     //     gl_FragDepth = renderedFrameDepth/10000;
     // } else {

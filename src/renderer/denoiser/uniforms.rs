@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use crevice::std430::AsStd430;
+use std::sync::Arc;
 
 use futures::lock::Mutex;
 use glam::{IVec2, Mat4};
@@ -21,7 +21,7 @@ impl Uniforms {
         let mut new = Self {
             inverse_past_camera_matrix: Mat4::default().into(),
             camera_matrix: Mat4::default().into(),
-            resolution: mint::Vector2 {x: 1, y: 1},
+            resolution: mint::Vector2 { x: 1, y: 1 },
             focal_length: 0.5,
             frame_count: 0,
         };
@@ -35,13 +35,14 @@ impl Uniforms {
             .player
             .as_ref()
             .expect("ERROR: expected resource not found");
-        
+
         self.inverse_past_camera_matrix = Mat4::from(self.camera_matrix).inverse().into();
         self.camera_matrix = player.transform.as_matrix().into();
         self.resolution = IVec2::new(
             player.camera.size.width as i32,
             player.camera.size.height as i32,
-        ).into();
+        )
+        .into();
         self.focal_length = player.camera.focal_length();
         self.frame_count = player.camera.frame_count as i32;
     }

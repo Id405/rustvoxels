@@ -26,6 +26,8 @@ fn main() {
 
     let mut last_frame = std::time::Instant::now();
 
+    let mut mouse_grab = true;
+
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::WindowEvent {
@@ -36,14 +38,33 @@ fn main() {
                     // UPDATED!
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::KeyboardInput { input, .. } => futures::executor::block_on(
-                            game_logic.input_event(&InputEvent::Keyboard(*input)),
-                        ),
+                        WindowEvent::KeyboardInput { input, .. } => {
+                            futures::executor::block_on(
+                                game_logic.input_event(&InputEvent::Keyboard(*input)),
+                            );
+                            match input.state {
+                                ElementState::Pressed => match input.virtual_keycode {
+                                    Some(keycode) => match keycode {
+                                        VirtualKeyCode::Escape => mouse_grab = !mouse_grab,
+                                        _ => (),
+                                    },
+                                    None => (),
+                                },
+                                ElementState::Released => (),
+                            }
+                        }
                         WindowEvent::Resized(physical_size) => {
                             futures::executor::block_on(renderer.resize(&context, *physical_size));
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            futures::executor::block_on(renderer.resize(&context, **new_inner_size));
+                            futures::executor::block_on(
+                                renderer.resize(&context, **new_inner_size),
+                            );
+                        }
+                        WindowEvent::Focused(focus) => {
+                            if *focus == false {
+                                mouse_grab = false;
+                            }
                         }
                         _ => {}
                     }
@@ -54,7 +75,9 @@ fn main() {
                 match futures::executor::block_on(renderer.render(&context)) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SurfaceError::Lost) => futures::executor::block_on(renderer.resize(&context, renderer.size())),
+                    Err(wgpu::SurfaceError::Lost) => {
+                        futures::executor::block_on(renderer.resize(&context, renderer.size()))
+                    }
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
@@ -63,17 +86,21 @@ fn main() {
             }
             Event::MainEventsCleared => {
                 let delta: std::time::Duration = std::time::Instant::now() - last_frame;
-                context.window.set_cursor_visible(false);
-                if let Err(why) = context.window.set_cursor_grab(true) {
+                futures::executor::block_on(game_logic.update(delta.as_secs_f32()));
+                context.window.set_cursor_visible(!mouse_grab);
+                if let Err(why) = context.window.set_cursor_grab(mouse_grab) {
                     eprintln!("{:?}", why);
                 } // TODO; rework to have cursor grabbing dictated by gamelogic
-                futures::executor::block_on(game_logic.update(delta.as_secs_f32()));
                 last_frame = std::time::Instant::now();
                 context.window.request_redraw();
             }
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::MouseMotion { delta } => {
-                    futures::executor::block_on(game_logic.input_event(&InputEvent::Mouse(delta)))
+                    if mouse_grab {
+                        futures::executor::block_on(
+                            game_logic.input_event(&InputEvent::Mouse(delta)),
+                        )
+                    }
                 }
                 _ => (),
             },

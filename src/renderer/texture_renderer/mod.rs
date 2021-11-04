@@ -218,7 +218,8 @@ impl TextureRenderer {
             depth_stencil_attachment: None,
         });
 
-        let render_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor { // TODO create const sampler
+        let render_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
+            // TODO create const sampler
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -227,7 +228,6 @@ impl TextureRenderer {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
-
 
         self.texture_bind_group = context
             .device
