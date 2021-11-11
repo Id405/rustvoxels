@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use futures::lock::Mutex;
 use wgpu::{util::DeviceExt, CommandEncoder};
@@ -8,10 +8,13 @@ use crate::game::World;
 
 pub use render_context::RenderContext;
 
+use self::texture_atlas::TextureAtlas;
+
 mod denoiser;
 mod glsl_loader;
 mod raytracer;
 mod render_context;
+mod texture_atlas;
 mod texture_renderer;
 
 #[repr(C)]
@@ -71,12 +74,15 @@ pub struct Renderer {
     denoiser: denoiser::Denoiser,
     texture_renderer: texture_renderer::TextureRenderer,
     world: Arc<Mutex<World>>,
+    atlas: Rc<RefCell<TextureAtlas>>,
 }
 
 impl Renderer {
     // Creating some of the wgpu types requires async code
     pub async fn new(context: &RenderContext, world: Arc<Mutex<World>>) -> Renderer {
         let size = context.window.inner_size();
+
+        let atlas = Rc::new(RefCell::new(TextureAtlas::new(&context)));
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -93,20 +99,18 @@ impl Renderer {
 
         // let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
 
-        let raytracer = raytracer::Raytracer::new(context, world.clone(), &surface_config).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+        let raytracer =
+            raytracer::Raytracer::new(context, world.clone(), &surface_config, atlas.clone()).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
 
-        let denoiser = denoiser::Denoiser::new(
-            context,
-            world.clone(),
-            raytracer.render_texture(),
-            raytracer.depth_texture(),
-        )
-        .await;
+        let denoiser = denoiser::Denoiser::new(context, world.clone(), atlas.clone()).await;
 
         let texture_renderer = texture_renderer::TextureRenderer::new(
             context,
             &surface_config,
-            raytracer.render_texture_view(),
+            &atlas
+                .borrow()
+                .get_view("denoiser_attachment_color", context)
+                .unwrap(),
         )
         .await;
 
@@ -126,6 +130,7 @@ impl Renderer {
             world,
             texture_renderer,
             denoiser,
+            atlas,
         }
     }
 
@@ -137,6 +142,8 @@ impl Renderer {
         context: &RenderContext,
         new_size: winit::dpi::PhysicalSize<u32>,
     ) {
+        let mut atlas = self.atlas.borrow_mut();
+
         self.size = new_size;
         self.surface_config.width = new_size.width;
         self.surface_config.height = new_size.height;
@@ -146,15 +153,17 @@ impl Renderer {
 
         self.world.lock().await.player.as_mut().unwrap().camera.size = new_size.clone();
 
+        atlas.resize(context);
+
         self.raytracer.resize(new_size, &context);
-        self.denoiser.resize(
+        self.denoiser.resize(new_size, &context);
+        self.texture_renderer.resize(
             new_size,
-            &self.raytracer.render_texture(),
-            self.raytracer.depth_texture(),
+            &atlas
+                .get_view("denoiser_attachment_color", context)
+                .unwrap(),
             &context,
         );
-        self.texture_renderer
-            .resize(new_size, self.denoiser.render_texture_view(), &context);
     }
 
     pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
@@ -188,7 +197,11 @@ impl Renderer {
                 &mut encoder,
                 &context,
                 &self.vertex_buffer,
-                &self.denoiser.render_texture_view(),
+                &self
+                    .atlas
+                    .borrow()
+                    .get_view("denoiser_attachment_color", context)
+                    .unwrap(),
                 &frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default()),

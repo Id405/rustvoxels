@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use crate::game::World;
 
@@ -8,7 +8,7 @@ use wgpu::{util::DeviceExt, Buffer, CommandEncoder, Texture, TextureView};
 
 use crevice::std430::{AsStd430, Std430};
 
-use super::{glsl_loader, RenderContext, Vertex, VERTICES};
+use super::{glsl_loader, texture_atlas::TextureAtlas, RenderContext, Vertex, VERTICES};
 
 mod uniforms;
 
@@ -18,11 +18,8 @@ pub struct Raytracer {
     raytrace_uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     world_bind_group: wgpu::BindGroup,
-    render_texture: Texture,
-    render_texture_view: TextureView,
-    render_texture_depth: Texture,
-    render_texture_depth_view: TextureView,
     world: Arc<Mutex<World>>,
+    atlas: Rc<RefCell<TextureAtlas>>,
 }
 
 impl Raytracer {
@@ -30,6 +27,7 @@ impl Raytracer {
         context: &RenderContext,
         world: Arc<Mutex<World>>,
         sc_desc: &wgpu::SurfaceConfiguration,
+        atlas: Rc<RefCell<TextureAtlas>>,
     ) -> Self {
         let size = context.window.inner_size();
 
@@ -202,39 +200,12 @@ impl Raytracer {
                     },
                 });
 
-        let size = world_lock.player.as_ref().unwrap().camera.size;
+        {
+            let mut atlas_lock = atlas.borrow_mut();
 
-        let render_texture_size = wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-
-        let render_texture = context.device.create_texture(&wgpu::TextureDescriptor {
-            size: render_texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            label: Some("raytrace render attachment"),
-        });
-
-        let render_texture_view =
-            render_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let render_texture_depth = context.device.create_texture(&wgpu::TextureDescriptor {
-            size: render_texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            label: Some("raytrace render attachment"),
-        });
-
-        let render_texture_depth_view =
-            render_texture_depth.create_view(&wgpu::TextureViewDescriptor::default());
+            atlas_lock.register("raytracer_attachment_color", context);
+            atlas_lock.register("raytracer_attachment_depth", context);
+        }
 
         Self {
             render_pipeline,
@@ -242,11 +213,8 @@ impl Raytracer {
             raytrace_uniform_buffer,
             uniform_bind_group,
             world_bind_group,
-            render_texture,
-            render_texture_view,
             world: world.clone(),
-            render_texture_depth,
-            render_texture_depth_view: render_texture_depth_view,
+            atlas,
         }
     }
 
@@ -258,11 +226,20 @@ impl Raytracer {
     ) {
         self.update_uniform_data(&context).await; // uniform data must be kept up to date before rendering is performed
 
+        let atlas = self.atlas.borrow();
+
+        let raytracer_attachment_color = &atlas
+            .get_view("raytracer_attachment_color", context)
+            .unwrap();
+        let raytracer_attachment_depth = &atlas
+            .get_view("raytracer_attachment_depth", context)
+            .unwrap();
+
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Raytracer Render Pass"),
             color_attachments: &[
                 wgpu::RenderPassColorAttachment {
-                    view: self.render_texture_view(),
+                    view: raytracer_attachment_color,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -275,7 +252,7 @@ impl Raytracer {
                     },
                 },
                 wgpu::RenderPassColorAttachment {
-                    view: self.depth_texture_view(),
+                    view: raytracer_attachment_depth,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -291,22 +268,6 @@ impl Raytracer {
         render_pass.set_bind_group(0, self.world_bind_group(), &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
         render_pass.draw(0..VERTICES.len() as u32, 0..1);
-    }
-
-    pub fn render_texture(&self) -> &Texture {
-        &self.render_texture
-    }
-
-    pub fn render_texture_view(&self) -> &TextureView {
-        &self.render_texture_view
-    }
-
-    pub fn depth_texture(&self) -> &Texture {
-        &self.render_texture_depth
-    }
-
-    pub fn depth_texture_view(&self) -> &TextureView {
-        &self.render_texture_depth_view
     }
 
     fn render_pipeline(&self) -> &wgpu::RenderPipeline {
@@ -330,40 +291,6 @@ impl Raytracer {
         &self.world_bind_group
     }
 
-    #[deprecated] // TOOD; move into resize trait
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, context: &RenderContext) {
-        let render_texture_size = wgpu::Extent3d {
-            width: new_size.width,
-            height: new_size.height,
-            depth_or_array_layers: 1,
-        };
-
-        self.render_texture = context.device.create_texture(&wgpu::TextureDescriptor {
-            size: render_texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            label: Some("raytrace render attachment"),
-        });
-
-        self.render_texture_view = self
-            .render_texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        self.render_texture_depth = context.device.create_texture(&wgpu::TextureDescriptor {
-            size: render_texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            label: Some("raytrace render attachment"),
-        });
-
-        self.render_texture_depth_view = self
-            .render_texture_depth
-            .create_view(&wgpu::TextureViewDescriptor::default());
-    }
+    // TOOD; move into resize trait
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, context: &RenderContext) {}
 }

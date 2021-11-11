@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use crevice::std430::{AsStd430, Std430};
 use futures::lock::Mutex;
@@ -11,118 +11,18 @@ use crate::{game::world, renderer::glsl_loader};
 
 use self::uniforms::Uniforms;
 
-use super::{RenderContext, Vertex, VERTICES};
+use super::{texture_atlas::TextureAtlas, RenderContext, Vertex, VERTICES};
 
 mod uniforms;
 
-pub struct TextureSwapChain {
-    pub textures: (wgpu::Texture, wgpu::Texture),
-    pub texture_views: (wgpu::TextureView, wgpu::TextureView),
-}
-
-impl TextureSwapChain {
-    pub fn new(context: &RenderContext, texture_size: &wgpu::Extent3d) -> Self {
-        let textures = (
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size.clone(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size.clone(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-        );
-
-        let texture_views = (
-            textures
-                .0
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-            textures
-                .1
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-        );
-
-        Self {
-            textures,
-            texture_views,
-        }
-    }
-
-    pub fn texture_view(&self, frame_count: u64) -> &wgpu::TextureView {
-        // TODO; check to make sure this returns the correct, most recently rendered texture view.
-        match frame_count % 2 == 0 {
-            true => &self.texture_views.1,
-            false => &self.texture_views.0,
-        }
-    }
-
-    pub fn texture_views(&self, frame_count: u64) -> (&wgpu::TextureView, &wgpu::TextureView) {
-        match frame_count % 2 == 0 {
-            true => (&self.texture_views.0, &self.texture_views.1),
-            false => (&self.texture_views.1, &self.texture_views.0),
-        }
-    }
-
-    pub fn resize(&mut self, context: &RenderContext, texture_size: &wgpu::Extent3d) {
-        self.textures = (
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size.clone(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-            context.device.create_texture(&wgpu::TextureDescriptor {
-                size: texture_size.clone(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                label: Some("raytrace render attachment"),
-            }),
-        );
-
-        self.texture_views = (
-            self.textures
-                .0
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-            self.textures
-                .1
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-        );
-    }
-}
-
 pub struct Denoiser {
     world: Arc<Mutex<World>>,
+    atlas: Rc<RefCell<TextureAtlas>>,
     render_pipeline: wgpu::RenderPipeline,
     uniforms: Uniforms,
     uniforms_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    out_render_texture_swapchain: TextureSwapChain,
-    out_depth_texture_swapchain: TextureSwapChain,
-    render_texture_view: wgpu::TextureView,
-    render_texture_sampler: wgpu::Sampler,
-    depth_texture_view: wgpu::TextureView,
-    depth_texture_sampler: wgpu::Sampler,
     size: PhysicalSize<u32>,
     frame_count: u64,
 }
@@ -131,8 +31,7 @@ impl Denoiser {
     pub async fn new(
         context: &RenderContext,
         world: Arc<Mutex<World>>,
-        render_texture: &wgpu::Texture,
-        depth_texture: &wgpu::Texture,
+        atlas: Rc<RefCell<TextureAtlas>>,
     ) -> Self {
         let size = context.window.inner_size();
 
@@ -183,16 +82,6 @@ impl Denoiser {
                 }],
                 label: Some("Denoising Renderer Uniform Bind Group"),
             });
-
-        let texture_size = wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-
-        let out_render_texture_swapchain = TextureSwapChain::new(&context, &texture_size);
-
-        let out_depth_texture_swapchain = TextureSwapChain::new(&context, &texture_size);
 
         let texture_bind_group_layout =
             context
@@ -279,31 +168,6 @@ impl Denoiser {
                     label: Some("Denoising Renderer Texture Bind Group Layout"),
                 });
 
-        let render_texture_view =
-            render_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let render_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let depth_texture_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
         let render_pipeline_layout =
             context
                 .device
@@ -357,6 +221,13 @@ impl Denoiser {
                     },
                 });
 
+        {
+            let mut atlas_lock = atlas.borrow_mut();
+
+            atlas_lock.register_swapchain("denoiser_attachment_color", context);
+            atlas_lock.register_swapchain("denoiser_attachment_depth_normals", context);
+        }
+
         Self {
             world,
             render_pipeline,
@@ -365,13 +236,8 @@ impl Denoiser {
             uniform_bind_group,
             size,
             texture_bind_group_layout,
-            render_texture_view,
-            render_texture_sampler,
             frame_count: 0,
-            depth_texture_view,
-            depth_texture_sampler,
-            out_render_texture_swapchain,
-            out_depth_texture_swapchain,
+            atlas,
         }
     }
 
@@ -391,13 +257,15 @@ impl Denoiser {
             bytemuck::cast_slice(self.uniforms.as_std430().as_bytes()),
         );
 
-        let (past_render_texture_view_sample, past_render_texture_view_attachment) = self
-            .out_render_texture_swapchain
-            .texture_views(self.frame_count);
+        let atlas = self.atlas.borrow();
 
-        let (past_depth_texture_view_sample, past_depth_texture_view_attachment) = self
-            .out_depth_texture_swapchain
-            .texture_views(self.frame_count);
+        let (past_render_texture_view_sample, past_render_texture_view_attachment) = atlas
+            .get_view_swapchain("denoiser_attachment_color", context)
+            .unwrap();
+
+        let (past_depth_texture_view_sample, past_depth_texture_view_attachment) = atlas
+            .get_view_swapchain("denoiser_attachment_depth_normals", context)
+            .unwrap();
 
         let texture_bind_group = context
             .device
@@ -406,39 +274,47 @@ impl Denoiser {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&self.render_texture_view),
+                        resource: wgpu::BindingResource::TextureView(
+                            &atlas
+                                .get_view("raytracer_attachment_color", context)
+                                .unwrap(),
+                        ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.render_texture_sampler),
+                        resource: wgpu::BindingResource::Sampler(&atlas.get_default_sampler()),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: wgpu::BindingResource::TextureView(
-                            past_render_texture_view_sample,
+                            &past_render_texture_view_sample,
                         ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&self.render_texture_sampler),
+                        resource: wgpu::BindingResource::Sampler(&atlas.get_default_sampler()),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&self.depth_texture_view),
+                        resource: wgpu::BindingResource::TextureView(
+                            &atlas
+                                .get_view("raytracer_attachment_depth", context)
+                                .unwrap(),
+                        ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler),
+                        resource: wgpu::BindingResource::Sampler(&atlas.get_default_sampler()),
                     },
                     wgpu::BindGroupEntry {
                         binding: 6,
                         resource: wgpu::BindingResource::TextureView(
-                            past_depth_texture_view_sample,
+                            &past_depth_texture_view_sample,
                         ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 7,
-                        resource: wgpu::BindingResource::Sampler(&self.depth_texture_sampler),
+                        resource: wgpu::BindingResource::Sampler(&atlas.get_default_sampler()),
                     },
                 ],
                 label: Some("Denoising Texture Bind Group"),
@@ -448,7 +324,7 @@ impl Denoiser {
             label: Some("Render Pass"),
             color_attachments: &[
                 wgpu::RenderPassColorAttachment {
-                    view: past_render_texture_view_attachment,
+                    view: &past_render_texture_view_attachment,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -461,7 +337,7 @@ impl Denoiser {
                     },
                 },
                 wgpu::RenderPassColorAttachment {
-                    view: past_depth_texture_view_attachment,
+                    view: &past_depth_texture_view_attachment,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -484,44 +360,7 @@ impl Denoiser {
         render_pass.draw(0..VERTICES.len() as u32, 0..1);
     }
 
-    // TODO I really badly need a resize trait, and then textures can be registered to be resized/updated on window resize + tie into texture atlas struct
-    pub fn resize(
-        &mut self,
-        size: PhysicalSize<u32>,
-        render_texture: &wgpu::Texture,
-        depth_texture: &wgpu::Texture,
-        context: &RenderContext,
-    ) {
-        self.render_texture_view =
-            render_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        self.depth_texture_view =
-            depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let texture_size = wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-
-        self.out_depth_texture_swapchain
-            .resize(&context, &texture_size);
-        self.out_render_texture_swapchain
-            .resize(&context, &texture_size);
-
+    pub fn resize(&mut self, size: PhysicalSize<u32>, context: &RenderContext) {
         self.size = size;
-    }
-
-    pub fn render_textures(&self) -> (&wgpu::Texture, &wgpu::Texture) {
-        (
-            &self.out_render_texture_swapchain.textures.0,
-            &self.out_render_texture_swapchain.textures.1,
-        )
-    }
-
-    pub fn render_texture_view(&self) -> &wgpu::TextureView {
-        // TODO; check to make sure this returns the correct, most recently rendered texture view.
-        self.out_render_texture_swapchain
-            .texture_view(self.frame_count)
     }
 }

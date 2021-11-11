@@ -48,14 +48,16 @@ impl Uniforms {
         self.resolution = IVec2::new(
             player.camera.size.width as i32,
             player.camera.size.height as i32,
-        ).into();
+        )
+        .into();
         self.frame_count = player.camera.frame_count as i32;
         self.focal_length = player.camera.focal_length();
         self.scene_size = IVec3::new(
             voxel_grid.width() as i32,
             voxel_grid.length() as i32,
             voxel_grid.height() as i32,
-        ).into();
+        )
+        .into();
         self.octree_depth = voxel_grid.get_mip_levels() as i32;
         self.max_steps = 200; // TODO; config refactor
         self.samples = 5; // TODO; config refactor

@@ -15,7 +15,7 @@ fn main() {
     env_logger::init();
     let event_loop = winit::event_loop::EventLoop::new();
 
-    let context = futures::executor::block_on(RenderContext::new(&event_loop));
+    let mut context = futures::executor::block_on(RenderContext::new(&event_loop));
 
     let world = Arc::new(Mutex::new(World::new(&context)));
 
@@ -92,6 +92,7 @@ fn main() {
                     eprintln!("{:?}", why);
                 } // TODO; rework to have cursor grabbing dictated by gamelogic
                 last_frame = std::time::Instant::now();
+                context.frame_count += 1;
                 context.window.request_redraw();
             }
             Event::DeviceEvent { event, .. } => match event {

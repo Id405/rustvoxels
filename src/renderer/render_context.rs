@@ -5,6 +5,7 @@ pub struct RenderContext {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    pub frame_count: u64,
 }
 
 impl RenderContext {
@@ -44,6 +45,7 @@ impl RenderContext {
             adapter,
             device,
             queue,
+            frame_count: 0,
         };
 
         context
