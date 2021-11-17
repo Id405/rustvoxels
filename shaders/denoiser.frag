@@ -4,15 +4,17 @@
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outDepth;
 
-// Do we really need all these samplers? I'm not so sure
+// TODO Do we really need all these samplers? I'm not so sure
 layout (set=0, binding = 0) uniform texture2D rendered_frame_texture;
 layout (set=0, binding = 1) uniform sampler rendered_frame_sampler;
 layout (set=0, binding = 2) uniform texture2D past_frame_texture;
 layout (set=0, binding = 3) uniform sampler past_frame_sampler;
 layout (set=0, binding = 4) uniform texture2D rendered_frame_depth_texture;
 layout (set=0, binding = 5) uniform sampler rendered_frame_depth_sampler; 
-layout (set=0, binding = 5) uniform texture2D past_frame_depth_texture;
-layout (set=0, binding = 6) uniform sampler past_frame_depth_sampler; 
+layout (set=0, binding = 6) uniform texture2D past_frame_depth_texture;
+layout (set=0, binding = 7) uniform sampler past_frame_depth_sampler; 
+layout (set=0, binding = 8) uniform texture2D rendered_frame_albedo_texture;
+layout (set=0, binding = 9) uniform sampler rendered_frame_albedo_sampler; 
 
 layout (set=1, binding=0, std430) uniform Uniforms {
     mat4 invPastCameraMatrix;
@@ -40,6 +42,7 @@ void main() {
     vec4 renderedFrameDepthNormals = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), textureCoordinate);
     float renderedFrameDepth = renderedFrameDepthNormals.a*10000;
     vec3 renderedFrameNormal = renderedFrameDepthNormals.rgb;
+    vec4 renderedFrameAlbedo = texture(sampler2D(rendered_frame_albedo_texture, rendered_frame_albedo_sampler), textureCoordinate);
 
     // from https://www.shadertoy.com/view/ldKBzG
     vec2 offset[25];
@@ -112,20 +115,20 @@ void main() {
     { 
         vec2 offset = offset[i]*1.5;
         vec2 uv = (gl_FragCoord.xy+offset)/resolution;
-
+        
         vec4 localFrameColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), uv);
-        vec4 delta = renderedFrameColor - localFrameColor;
+        vec4 localFrameAlbedo = texture(sampler2D(rendered_frame_albedo_texture, rendered_frame_albedo_sampler), uv);
+        vec4 delta = (renderedFrameAlbedo - localFrameAlbedo)*10000;
         float dist2 = dot(delta,delta);
         float color_weight = min(exp(-(dist2)), 1.0);
         
         vec4 localFrameNormal = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), uv);
-        delta = (renderedFrameDepthNormals - localFrameNormal) * vec4(1.0, 1.0, 1.0, 10000);
-        // delta = (renderedFrameDepthNormals + vec4(1.0, 1.0, 1.0, 0.0)) - (localFrameNormal + vec4(1.0, 1.0, 1.0, 0.0));
+        delta = (renderedFrameDepthNormals - localFrameNormal) * vec4(1.0, 1.0, 1.0, 100000.0);
         dist2 = max(dot(delta, delta), 0.0);
         float normal_weight = min(exp(-(dist2)), 1.0);
         
-        // float weight = color_weight*normal_weight;
-        float weight = normal_weight;
+        float weight = color_weight*normal_weight;
+        // float weight = normal_weight;
         sum += localFrameColor*weight*kernel[i];
         cumulative_weight += weight*kernel[i];
     }
@@ -171,17 +174,17 @@ void main() {
         reprojectionPercentWeighted = 0.0;
     }
 
-    if(pastFrameNormal != renderedFrameNormal) {
-        reprojectionPercentWeighted = 0.0;
+    if(length(pastFrameNormal - renderedFrameNormal) > 0.1) {
+        reprojectionPercentWeighted *= 0.1;
     }
-
-    if(abs(pastFrameDepth - renderedFrameDepth) > 1.0) {
-        reprojectionPercentWeighted = 0.0;
-    }
+    
+    reprojectionPercentWeighted *= min(1/abs(pastFrameDepth - renderedFrameDepth), 1.0);
 
     // Finally average out the depth and color information
     outColor = renderedFrameColor * (1.0 - reprojectionPercentWeighted) + pastFrameColor * reprojectionPercentWeighted;
     outDepth = renderedFrameDepthNormals;
+    // outColor = renderedFrameColor;
+    // outColor = vec4(vec3(abs(pastFrameDepth - renderedFrameDepth)), 1.0);
     // outColor = vec4(vec3(cumulative_weight), 1.0);
     // outColor = vec4(vec3(dot(vec3(camera_matrix[0][2], camera_matrix[1][2], camera_matrix[2][2]), abs(renderedFrameNormal))), 1.0);
     // outColor = renderedFrameDepthNormals;

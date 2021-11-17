@@ -181,6 +181,11 @@ impl Raytracer {
                                 blend: None,
                                 write_mask: wgpu::ColorWrites::ALL,
                             },
+                            wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            },
                         ],
                     }),
                     primitive: wgpu::PrimitiveState {
@@ -205,6 +210,7 @@ impl Raytracer {
 
             atlas_lock.register("raytracer_attachment_color", context);
             atlas_lock.register("raytracer_attachment_depth", context);
+            atlas_lock.register("raytracer_attachment_world_position", context);
         }
 
         Self {
@@ -234,6 +240,9 @@ impl Raytracer {
         let raytracer_attachment_depth = &atlas
             .get_view("raytracer_attachment_depth", context)
             .unwrap();
+        let raytracer_attachment_world_position = &atlas
+            .get_view("raytracer_attachment_world_position", context)
+            .unwrap();
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Raytracer Render Pass"),
@@ -253,6 +262,14 @@ impl Raytracer {
                 },
                 wgpu::RenderPassColorAttachment {
                     view: raytracer_attachment_depth,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                },
+                wgpu::RenderPassColorAttachment {
+                    view: raytracer_attachment_world_position,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),

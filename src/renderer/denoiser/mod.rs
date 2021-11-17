@@ -164,6 +164,25 @@ impl Denoiser {
                             },
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 8,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 9,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                comparison: false,
+                                filtering: true,
+                            },
+                            count: None,
+                        },
                     ],
                     label: Some("Denoising Renderer Texture Bind Group Layout"),
                 });
@@ -269,7 +288,7 @@ impl Denoiser {
 
         let texture_bind_group = context
             .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
+            .create_bind_group(&wgpu::BindGroupDescriptor { // TODO this is just plain confusing
                 layout: &self.texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -314,6 +333,18 @@ impl Denoiser {
                     },
                     wgpu::BindGroupEntry {
                         binding: 7,
+                        resource: wgpu::BindingResource::Sampler(&atlas.get_default_sampler()),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: wgpu::BindingResource::TextureView(
+                            &atlas
+                                .get_view("raytracer_attachment_world_position", context)
+                                .unwrap(),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 9,
                         resource: wgpu::BindingResource::Sampler(&atlas.get_default_sampler()),
                     },
                 ],

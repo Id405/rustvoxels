@@ -14,7 +14,7 @@ impl World {
     pub fn new(context: &RenderContext) -> Self {
         let mut world = Self::default();
         world.voxel_grid = Some(VoxelGrid::from_string(
-            std::fs::read_to_string("assets/scenes/garfield.evox")
+            std::fs::read_to_string("assets/scenes/streetcorner.evox")
                 .expect("ERROR failed to load scene"),
         )); // todo config refactor
         world.voxel_grid.as_mut().unwrap().gen_texture(context);

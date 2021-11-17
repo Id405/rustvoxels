@@ -37,7 +37,7 @@ impl<'a> ShaderBundle<'a> {
 
         opts.set_source_language(SourceLanguage::GLSL);
         opts.set_optimization_level(OptimizationLevel::Performance);
-        opts.set_target_env(TargetEnv::Vulkan, EnvVersion::WebGPU as u32); // Platform compatibility issues will come from this. Needa force vulkan for every platform
+        opts.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_1 as u32); // Platform compatibility issues will come from this. Needa force vulkan for every platform
 
         opts.set_include_callback(move |_, _, _, _| {
             todo!();

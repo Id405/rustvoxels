@@ -1,10 +1,11 @@
 #version 460
 #extension GL_EXT_samplerless_texture_functions : require
 #extension GL_EXT_scalar_block_layout : require
+#extension GL_KHR_shader_subgroup_vote : require
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outDepth;
-
+layout(location = 2) out vec4 outAlbedo;
 
 layout(set = 1, binding = 0, std430) uniform Raytrace {
 	mat4 world_matrix;
@@ -20,12 +21,12 @@ layout(set = 1, binding = 0, std430) uniform Raytrace {
 layout(set = 0, binding = 0) uniform texture3D scene_texture;
 
 
-#define SKYCOLOR vec3(0.9)
-#define SUNCOLOR vec3(192.0/255.0, 191.0/255.0, 173.0/255.0)
+#define SKYCOLOR vec3(0.1)
+#define SUNCOLOR vec3(1, 1, 1)
 #define LIGHTCOLOR vec3(5, 0, 0)
-#define LIGHTDIR vec3(0.0, 0.0, 1.0)
-#define SUNSHARPNESS 2
-#define SUNPOWER 4
+#define LIGHTDIR vec3(1.0, 0.0, 1.0)
+#define SUNSHARPNESS 10
+#define SUNPOWER 12
 #define SKYPOWER 0.2
 #define SUNLIGHTSTRENGTH 1.0
 
@@ -126,12 +127,12 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 		if(rayAABB(raypos, raydir, vec3(0, 0, 0), vec3(scene_size), res, n)) {
 			raypos += raydir * res.x + n * 0.00001;
 		} else {
-			return Hit(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 0.0, vec3(0, 0, 0)); // Return fully lit scene
+			return Hit(SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER, 0.0, vec3(0)); // Return fully lit scene
 		}
 	}
 
 	int maxLevel = octree_depth-1;
-	int level = maxLevel/2; // The current level in the octree
+	int level = maxLevel/5; // The current level in the octree
 
 	float complexity = 0; // Used to display a complexity map, however not required for the actual rendering
 
@@ -146,15 +147,18 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 
 	bool moved = false;
 
-	float dist;
+	float dist = 0;
     vec3 normal = vec3(0.0);
 	int steps = 0;
 
 	vec3 luminance = vec3(0);
 	vec3 color_out = vec3(1);
 	float depth = 0;
+	float bounces = 0;
+	int min_level = 0;
 
-	float hit = 0;
+	bool hit = false;
+	bool absorbed = false;
 
 	for(int i=0; i<max_steps; i++) { // Begin marching the ray now
 		if(!insideBoundingBox(gridPosition, vec3(-2), scene_size + vec3(1))) { // If we aren't inside the bounding box of the scene, there is no more geometry to intersect and we can return
@@ -169,20 +173,17 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 		if(verticalMove) {
 			complexity += int(nonEmpty); // Increment the complexity variable to keep track of a complexity map
 
-			vec3 modifiedRayPosition = raypos;
-			if(moved) {
-				modifiedRayPosition = raypos + raydir * dist; // Find point of intersection between ray and the current grid position
-			}
+			vec3 modifiedRayPosition = raypos + raydir * dist;
 
-			if(level == 0 && nonEmpty) { // If we are at the lowest level and hit a non empty grid position that means we hit scene geometry and we can scatter the ray off of it
+			if(level < (min_level + 1) && nonEmpty) { // If we are at the lowest level and hit a non empty grid position that means we hit scene geometry and we can scatter the ray off of it
 				// return vec4(vec3(complexity/(maxLevel)), 1); // Return complexity map
 
 				color_out *= getColor(gridPosition >> level, level);
 				// outColor *= 0.5; // Disable color and only view lighting
 
 				if(depth == 0) { // Update the depth variable to store the distance to the first intersection with the scene geometry
-					depth = dist;
-					hit = 1;
+					depth = dist; // TODO this seems incorrect?
+					hit = true;
 					// outNormal = vec4(normal, 1.0);
 				}
 
@@ -198,6 +199,11 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 				step = ivec3(sign(raydir));
 				raydirsign = greaterThan(sign(raydir), vec3(0));
 				dist = 0; // Reset the distance to zero
+				bounces++;
+				if (i > 75 && subgroupAll(hit)) {
+					absorbed = true;
+					break;
+				}
 			}
 
 			gridPosition = ivec3(floor(modifiedRayPosition - normal * 0.0001)); // Calculate a new grid position given that information
@@ -228,13 +234,15 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 		}
 
 		steps = i;
+		// min_level = i/(200/octree_depth);
 	}
 
 	// return vec4(vec3(float(steps)/max_steps), 1.0); // Return how many steps it took to render this pixel
 	// return vec4(outColor, 1.0); // Return scene lit only using ambient occlusion
 	// return vec4(vec3(complexity/(maxLevel * 4)), 1); // Return complexity map
 	// return vec4(vec3(dist/128), 1); // Return distance map
-	return Hit(color_out * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER + luminance), (depth + res.x) * hit, normal * hit); // Return fully lit scene
+	return Hit(color_out * (SUNCOLOR * pow(max(dot(normalize(LIGHTDIR), raydir), 0.0), SUNSHARPNESS) * SUNPOWER + SKYCOLOR * SKYPOWER * float(!absorbed) + luminance), (depth + res.x) * float(hit), normal * float(hit)); // Return fully lit scene
+	// return Hit(color_out * float(!absorbed), (depth + res.x) * float(hit), normal * float(hit)); // Return fully lit scene
 	// return Hit(color_out, (depth + res.x) * hit, normal * hit);
 	// return vec4(vec3(raydir.x, raydir.y, 0), 1.0);
 }
@@ -273,8 +281,8 @@ void mainImage(in vec2 fragCoord )
 	}
 
 	outColor = vec4(color.rgb, 1.0);
-	// outColor = vec4(vec3(primary.depth/128), 1.0);
 	outDepth = vec4(primary.normal, primary.depth/10000);
+	outAlbedo = vec4(primary.color, 1.0);
 }
 
 void main() {

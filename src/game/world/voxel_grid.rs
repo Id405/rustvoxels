@@ -48,7 +48,7 @@ impl VoxelGrid {
                 x.parse::<usize>()
                     .expect("failed to parse scene: expected int in dimension data got str")
             });
-            let voxel_data: [usize; 6] = values.collect::<Vec<_>>().try_into().expect(
+            let voxel_data: Vec<usize> = values.collect::<Vec<_>>().try_into().expect(
                 format!(
                     "failed to parse scene: not enough data on line {}",
                     line_number + 1
@@ -57,12 +57,15 @@ impl VoxelGrid {
             );
 
             let pos: [usize; 3] = (&voxel_data[0..3]).try_into().unwrap();
-            let color: [u8; 3] = voxel_data[3..6]
-                .iter()
-                .map(|x| *x as u8)
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap();
+            let mut color: [u8; 3] = [125, 125, 125];
+            if voxel_data.len() == 6 {
+                color = voxel_data[3..6]
+                    .iter()
+                    .map(|x| *x as u8)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap();
+            }
             let color: [u8; 4] = [color[0], color[1], color[2], 255];
 
             voxel_grid.set_data(pos, color);

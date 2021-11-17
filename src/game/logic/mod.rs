@@ -126,7 +126,7 @@ impl GameLogic {
 
         look_delta = look_delta.normalize_or_zero() * delta * 1.0;
 
-        move_dir = move_dir.normalize_or_zero() * delta * 20.0;
+        move_dir = move_dir.normalize_or_zero() * delta * 200.0;
 
         player.transform.walk(move_dir);
         player.transform.add_rotation(look_delta);
