@@ -22,16 +22,12 @@ layout (set=1, binding=0, std430) uniform Uniforms {
     ivec2 resolution; 
     float focal_length;
     int frame_count;
+    int enable_filtering;
+    float repro_percent;
+    float blur_strength;
 };
 
-#define repro_percent 0.90
-
 void main() {
-    // outColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), gl_FragCoord.xy/vec2(resolution)) * vec4(1.0 - 0.90)
-    //  + texture(sampler2D(past_frame_texture, past_frame_sampler), gl_FragCoord.xy/vec2(resolution)) * vec4(0.90);
-    // outColor = texture(sampler2D(rendered_frame_depth_texture, rendered_frame_depth_sampler), gl_FragCoord.xy/vec2(resolution));
-    // outColor = vec4(vec3(vec2(gl_FragCoord.xy/vec2(resolution)), 0.0), 1.0);
-
     vec2 resolution = vec2(resolution.x, resolution.y);
 
     vec2 textureCoordinate = gl_FragCoord.xy/resolution;
@@ -113,7 +109,7 @@ void main() {
 
     for(int i=0; i<25; i++)
     { 
-        vec2 offset = offset[i]*1.5;
+        vec2 offset = offset[i]*blur_strength;
         vec2 uv = (gl_FragCoord.xy+offset)/resolution;
         
         vec4 localFrameColor = texture(sampler2D(rendered_frame_texture, rendered_frame_sampler), uv);
@@ -133,7 +129,9 @@ void main() {
         cumulative_weight += weight*kernel[i];
     }
 
-    renderedFrameColor = sum/cumulative_weight;
+    if(enable_filtering == 1) {
+        renderedFrameColor = sum/cumulative_weight;
+    }
 
     // Setup a raycast to find the worldspace position of the current pixel
     vec2 s = vec2((gl_FragCoord.x) - resolution.x/2.0f, (resolution.y - gl_FragCoord.y) - resolution.y/2.0f);
@@ -179,6 +177,10 @@ void main() {
     }
     
     reprojectionPercentWeighted *= min(1/abs(pastFrameDepth - renderedFrameDepth), 1.0);
+
+    if(enable_filtering != 1) {
+        reprojectionPercentWeighted = 0.0;
+    }
 
     // Finally average out the depth and color information
     outColor = renderedFrameColor * (1.0 - reprojectionPercentWeighted) + pastFrameColor * reprojectionPercentWeighted;

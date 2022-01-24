@@ -14,6 +14,9 @@ pub struct Uniforms {
     resolution: mint::Vector2<i32>,
     focal_length: f32,
     frame_count: i32,
+    enable_filtering: i32,
+    reprojection_percent: f32,
+    blur_strength: f32,
 }
 
 impl Uniforms {
@@ -24,6 +27,9 @@ impl Uniforms {
             resolution: mint::Vector2 { x: 1, y: 1 },
             focal_length: 0.5,
             frame_count: 0,
+            enable_filtering: 0,
+            reprojection_percent: 0.90,
+            blur_strength: 1.5,
         };
         new.update(world).await;
         new
@@ -33,6 +39,10 @@ impl Uniforms {
         let world_lock = world.lock().await;
         let player = world_lock
             .player
+            .as_ref()
+            .expect("ERROR: expected resource not found");
+        let config = world_lock
+            .config
             .as_ref()
             .expect("ERROR: expected resource not found");
 
@@ -45,5 +55,9 @@ impl Uniforms {
         .into();
         self.focal_length = player.camera.focal_length();
         self.frame_count = player.camera.frame_count as i32;
+        self.enable_filtering = config.get_var("renderer_denoiser_enable_filtering").unwrap().as_i32();
+        self.reprojection_percent = config.get_var("renderer_denoiser_reprojection_percent").unwrap().as_f32();
+        self.blur_strength = config.get_var("renderer_denoiser_edge_avoiding_blur_strength").unwrap().as_f32();
     }
 }
+

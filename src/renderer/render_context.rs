@@ -1,3 +1,5 @@
+use crate::ui::Ui;
+
 pub struct RenderContext {
     pub window: winit::window::Window,
     pub instance: wgpu::Instance,
@@ -6,6 +8,8 @@ pub struct RenderContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub frame_count: u64,
+    pub frame_time: f32,
+    pub render_time: f32,
 }
 
 impl RenderContext {
@@ -23,6 +27,7 @@ impl RenderContext {
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
             })
             .await
             .unwrap();
@@ -46,6 +51,8 @@ impl RenderContext {
             device,
             queue,
             frame_count: 0,
+            frame_time: 0.0,
+            render_time: 0.0,
         };
 
         context

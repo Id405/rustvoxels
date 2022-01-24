@@ -12,6 +12,7 @@ layout(set = 1, binding = 0, std430) uniform Raytrace {
     ivec3 scene_size;
     ivec2 resolution;
 	int samples;
+	int primary_ray_only;
     int frame_count;
 	int max_steps;
     int octree_depth;
@@ -19,15 +20,16 @@ layout(set = 1, binding = 0, std430) uniform Raytrace {
 };
 
 layout(set = 0, binding = 0) uniform texture3D scene_texture;
+layout(set = 0, binding = 1) uniform texture2D noise_texture;
 
 
 #define SKYCOLOR vec3(0.1)
 #define SUNCOLOR vec3(1, 1, 1)
 #define LIGHTCOLOR vec3(5, 0, 0)
-#define LIGHTDIR vec3(1.0, 0.0, 1.0)
-#define SUNSHARPNESS 10
-#define SUNPOWER 12
-#define SKYPOWER 0.2
+#define LIGHTDIR vec3(-1.0, -1.0, 1.0)
+#define SUNSHARPNESS 2
+#define SUNPOWER 4.0
+#define SKYPOWER 2.0
 #define SUNLIGHTSTRENGTH 1.0
 
 #define PI 3.1415926535897932384626433832795
@@ -66,11 +68,36 @@ vec3 rand3(vec3 seed) {
     return vec3(rz & uvec3(0x7fffffffU))/float(0x7fffffff);
 }
 
+int noise_sample_count;
+
+vec3 blue_noise() {
+	return texelFetch(noise_texture, (ivec2(gl_FragCoord.xy) + ivec2(frame_count*293, frame_count*271) + ivec2(noise_sample_count*173, noise_sample_count*907)) % ivec2(512), 0).rgb;
+	noise_sample_count++;
+}
+
 vec3 random_in_unit_sphere() {
-    vec3 h = rand3(g_seed) * vec3(2.,6.28318530718,1.)-vec3(1.0,0.0,0.0);
+    // vec3 h = rand3(g_seed) * vec3(2.,6.28318530718,1.)-vec3(1.0,0.0,0.0);
+    vec3 h = blue_noise() * vec3(2.,6.28318530718,1.)-vec3(1.0,0.0,0.0);
     float phi = h.y;
     float r = pow(h.z, 1./3.);
 	return r * vec3(sqrt(1.-h.x*h.x)*vec2(sin(phi),cos(phi)),h.x);
+}
+
+// https://www.shadertoy.com/view/4tl3z4
+vec3 cosWeightedRandomHemisphereDirection(const vec3 n) {
+  	// vec2 r = rand2(g_seed);
+	vec2 r = blue_noise().rg;
+    
+	vec3  uu = normalize( cross( n, vec3(0.0,1.0,1.0) ) );
+	vec3  vv = cross( uu, n );
+	
+	float ra = sqrt(r.y);
+	float rx = ra*cos(6.2831*r.x); 
+	float ry = ra*sin(6.2831*r.x);
+	float rz = sqrt( 1.0-r.y );
+	vec3  rr = vec3( rx*uu + ry*vv + rz*n );
+    
+    return normalize( rr );
 }
 
 // Scatter a ray with respect to lambertian shading
@@ -194,7 +221,7 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 				modifiedRayPosition += normal * 0.01; // Step off of the scene geometry slightly to avoid getting stuck inside of it
 				
 				raypos = modifiedRayPosition; // Update the ray position, ray direction and the values that depend on it
-				raydir = scatter(normal);
+				raydir = cosWeightedRandomHemisphereDirection(normal);
 				deltaDist = abs(vec3(1)/raydir);
 				step = ivec3(sign(raydir));
 				raydirsign = greaterThan(sign(raydir), vec3(0));
@@ -251,6 +278,7 @@ void mainImage(in vec2 fragCoord )
 {
 	// Initialize global seed for RNG
 	g_seed = float(base_hash(floatBitsToUint(fragCoord + float(frame_count)/240)))/float(0xffffffffU);
+	noise_sample_count = 0;
 
 	vec4 color = vec4(0.0);
 
@@ -266,11 +294,19 @@ void mainImage(in vec2 fragCoord )
 
 	Hit primary = trace(raydir, raypos, true);
 
+	if (primary_ray_only == 1) {
+		outColor = vec4(primary.color, 1.0) * clamp(abs(dot(primary.normal, LIGHTDIR)), 0.8, 1.0);
+		outDepth = vec4(primary.normal, primary.depth/10000);
+		outAlbedo = vec4(primary.color, 1.0);
+		return;
+	}
+
 	raypos += raydir * (primary.depth - 0.01);
 
 	if (primary.depth != 0.0) {
 	// Render the scenes samples
 		for(int i=0; i < samples; i++) {
+			noise_sample_count += 127;
 			Hit diffuse = trace(raydir, raypos, false);
 
 			color += vec4(diffuse.color, 1.0); // Accumulate color average
@@ -281,6 +317,7 @@ void mainImage(in vec2 fragCoord )
 	}
 
 	outColor = vec4(color.rgb, 1.0);
+
 	outDepth = vec4(primary.normal, primary.depth/10000);
 	outAlbedo = vec4(primary.color, 1.0);
 }

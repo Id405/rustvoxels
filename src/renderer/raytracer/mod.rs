@@ -88,6 +88,7 @@ impl Raytracer {
         let world_texture = scene.as_texture();
 
         let world_texture_view = world_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         // let world_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
         //     address_mode_u: wgpu::AddressMode::ClampToEdge,
         //     address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -113,39 +114,19 @@ impl Raytracer {
                             },
                             count: None,
                         },
-                        // wgpu::BindGroupLayoutEntry {
-                        //     binding: 1,
-                        //     visibility: wgpu::ShaderStages::FRAGMENT,
-                        //     ty: wgpu::BindingType::Sampler {
-                        //         // This is only for TextureSampleType::Depth
-                        //         comparison: false,
-                        //         // This should be true if the sample_type of the texture is:
-                        //         //     TextureSampleType::Float { filterable: true }
-                        //         // Otherwise you'll get an error.
-                        //         filtering: true,
-                        //     },
-                        //     count: None,
-                        // },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            },
+                            count: None,
+                        },
                     ],
                     label: Some("texture_bind_group_layout"),
                 });
-
-        let world_bind_group = context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&world_texture_view),
-                    },
-                    // wgpu::BindGroupEntry {
-                    //     binding: 1,
-                    //     resource: wgpu::BindingResource::Sampler(&world_sampler),
-                    // },
-                ],
-                label: Some("world_bind_group"),
-            });
 
         let render_pipeline_layout =
             context
@@ -194,8 +175,8 @@ impl Raytracer {
                         front_face: wgpu::FrontFace::Ccw,
                         cull_mode: None,
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        clamp_depth: false,
                         conservative: false,
+                        unclipped_depth: false,
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState {
@@ -203,6 +184,7 @@ impl Raytracer {
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         {
@@ -211,8 +193,30 @@ impl Raytracer {
             atlas_lock.register("raytracer_attachment_color", context);
             atlas_lock.register("raytracer_attachment_depth", context);
             atlas_lock.register("raytracer_attachment_world_position", context);
+            atlas_lock.register_from_image(
+                "raytracer_binding_noise",
+                include_bytes!("../../../assets/textures/LDR_RGB1_0.png"),
+                context,
+            );
         }
 
+        let world_bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&world_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&atlas.borrow().get_view("raytracer_binding_noise", context).unwrap()),
+                    },
+                ],
+                label: Some("world_bind_group"),
+            });
+        
         Self {
             render_pipeline,
             raytrace_uniforms,

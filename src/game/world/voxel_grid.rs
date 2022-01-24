@@ -1,6 +1,6 @@
 //TODO refactor this entire module
 use rayon::prelude::*;
-use std::{borrow::Cow, convert::TryInto};
+use std::{borrow::Cow, convert::TryInto, io::Write};
 
 use crate::renderer::RenderContext;
 
@@ -145,7 +145,11 @@ impl VoxelGrid {
 
         data.push(self.data.clone());
 
+        print!("generating mipmap levels...");
+
         for level in 1..self.get_mip_levels() as usize {
+            print!(".");
+
             let div_factor = (2_usize).pow(level as u32);
             let (width, height, length) = (
                 self.width / div_factor,
@@ -220,6 +224,8 @@ impl VoxelGrid {
             data.push(level_data);
         }
 
+        println!("");
+
         unsafe {
             //TODO rework away unsafe
             for (mipmap_level, mipmap_data) in data.iter().enumerate() {
@@ -229,8 +235,6 @@ impl VoxelGrid {
                     self.height / div_factor,
                     self.length / div_factor,
                 );
-
-                println!("{}, {}x{}x{}", mipmap_level, width, height, length);
 
                 let texture_size = wgpu::Extent3d {
                     width: width as u32,
@@ -261,6 +265,6 @@ impl VoxelGrid {
     }
 
     pub fn get_mip_levels(&self) -> u32 {
-        (((self.width).min((self.height).min(self.length)) as f32).log2()).floor() as u32
+        ((((self.width).min((self.height).min(self.length)) as f32).log2()).floor() - 0.0).max(0.0) as u32
     }
 }

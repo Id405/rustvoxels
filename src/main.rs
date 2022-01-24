@@ -6,10 +6,13 @@ use futures::lock::Mutex;
 use game::logic::InputEvent;
 use game::{GameLogic, World};
 use renderer::RenderContext;
+use ui::Ui;
 use winit::{event::*, event_loop::ControlFlow};
 
+mod config;
 mod game;
 mod renderer;
+mod ui;
 
 fn main() {
     env_logger::init();
@@ -26,17 +29,19 @@ fn main() {
 
     let mut last_frame = std::time::Instant::now();
 
-    let mut mouse_grab = true;
+    let mut mouse_grab = false;
 
     event_loop.run(move |event, _, control_flow| {
-        match event {
+        futures::executor::block_on(Ui::handle_event(world.clone(), &event, &context));
+
+        match &event {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == context.window.id() => {
+            } if *window_id == context.window.id() => {
                 if !renderer.input(event) {
                     // UPDATED!
-                    match event {
+                    match &event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::KeyboardInput { input, .. } => {
                             futures::executor::block_on(
@@ -71,6 +76,7 @@ fn main() {
                 }
             }
             Event::RedrawRequested(_) => {
+                let last_render_start = std::time::Instant::now();
                 renderer.update();
                 match futures::executor::block_on(renderer.render(&context)) {
                     Ok(_) => {}
@@ -83,9 +89,11 @@ fn main() {
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e),
                 };
+                let render_delta = std::time::Instant::now() - last_render_start;
+                context.render_time = render_delta.as_secs_f32() * 1000.0;
             }
             Event::MainEventsCleared => {
-                let delta: std::time::Duration = std::time::Instant::now() - last_frame;
+                let delta = std::time::Instant::now() - last_frame;
                 futures::executor::block_on(game_logic.update(delta.as_secs_f32()));
                 context.window.set_cursor_visible(!mouse_grab);
                 if let Err(why) = context.window.set_cursor_grab(mouse_grab) {
@@ -93,15 +101,19 @@ fn main() {
                 } // TODO; rework to have cursor grabbing dictated by gamelogic
                 last_frame = std::time::Instant::now();
                 context.frame_count += 1;
+                context.frame_time = delta.as_secs_f32() * 1000.0;
                 context.window.request_redraw();
             }
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::MouseMotion { delta } => {
                     if mouse_grab {
                         futures::executor::block_on(
-                            game_logic.input_event(&InputEvent::Mouse(delta)),
+                            game_logic.input_event(&InputEvent::Mouse(*delta)),
                         )
                     }
+                }
+                DeviceEvent::Button { button, state } => {
+                    futures::executor::block_on(Ui::handle_click(world.clone(), &(button, state), &context));
                 }
                 _ => (),
             },

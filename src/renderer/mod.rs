@@ -12,6 +12,7 @@ use self::texture_atlas::TextureAtlas;
 
 mod denoiser;
 mod glsl_loader;
+mod gui_renderer;
 mod raytracer;
 mod render_context;
 mod texture_atlas;
@@ -73,6 +74,7 @@ pub struct Renderer {
     raytracer: raytracer::Raytracer,
     denoiser: denoiser::Denoiser,
     texture_renderer: texture_renderer::TextureRenderer,
+    gui: gui_renderer::Gui,
     world: Arc<Mutex<World>>,
     atlas: Rc<RefCell<TextureAtlas>>,
 }
@@ -104,6 +106,8 @@ impl Renderer {
 
         let denoiser = denoiser::Denoiser::new(context, world.clone(), atlas.clone()).await;
 
+        let gui = gui_renderer::Gui::new(context, world.clone(), &surface_config).await;
+
         let texture_renderer = texture_renderer::TextureRenderer::new(
             context,
             &surface_config,
@@ -131,6 +135,7 @@ impl Renderer {
             texture_renderer,
             denoiser,
             atlas,
+            gui,
         }
     }
 
@@ -172,11 +177,11 @@ impl Renderer {
     }
 
     pub fn update(&mut self) {
-        // remove `todo!()`
+        // remove
     }
 
     pub async fn render(&mut self, context: &RenderContext) -> Result<(), wgpu::SurfaceError> {
-        let frame = context.surface.get_current_frame()?.output;
+        let frame = context.surface.get_current_texture()?;
 
         let mut encoder = context
             .device
@@ -208,8 +213,20 @@ impl Renderer {
             )
             .await;
 
+        self.gui
+            .render(
+                &mut encoder,
+                &context,
+                &frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
+            )
+            .await;
+
         // submit will accept anything that implements IntoIter
         context.queue.submit(std::iter::once(encoder.finish()));
+
+        frame.present();
 
         self.world
             .lock()

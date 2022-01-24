@@ -31,11 +31,16 @@ impl GameLogic {
     pub async fn new(world: Arc<Mutex<World>>) -> Self {
         {
             let mut world_lock = world.lock().await;
+            let config = world_lock.config.as_ref().unwrap();
+            let fov = config.get_var("renderer_fov").unwrap().as_f32();
 
             world_lock.player = Some(Player {
-                transform: Transform::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.5, 0.0, 0.0)),
+                transform: Transform::new(
+                    Vec3::new(-20.717182, 216.95955, 98.43643),
+                    Vec3::new(-0.30362973, 0.0, -2.5180235),
+                ),
                 camera: Camera {
-                    fov: 90.0,
+                    fov,
                     size: PhysicalSize {
                         width: 1,
                         height: 1,
@@ -55,6 +60,8 @@ impl GameLogic {
 
     pub async fn input_event(&mut self, event: &InputEvent) {
         let mut world = self.world.lock().await;
+        let config = world.config.as_ref().unwrap();
+        let sensitivity = config.get_var("game_input_mouse_sensitivity").unwrap().as_f32();
         let player = world
             .player
             .as_mut()
@@ -63,9 +70,9 @@ impl GameLogic {
             InputEvent::Keyboard(key_event) => self.keyboard_state.input_event(key_event),
             InputEvent::Mouse(delta) => {
                 player.transform.add_rotation(Vec3::new(
-                    delta.1 as f32 * -0.0005,
+                    delta.1 as f32 * -sensitivity,
                     0.0,
-                    delta.0 as f32 * -0.0005,
+                    delta.0 as f32 * -sensitivity,
                 )); //TODO; configuration
             }
             InputEvent::MouseButton(_) => todo!(),
@@ -74,6 +81,8 @@ impl GameLogic {
 
     pub async fn update(&mut self, delta: f32) {
         let mut world = self.world.lock().await;
+        let config = world.config.as_ref().unwrap();
+        let move_speed = config.get_var("game_input_movement_speed").unwrap().as_f32();
         let player = world
             .player
             .as_mut()
@@ -126,7 +135,7 @@ impl GameLogic {
 
         look_delta = look_delta.normalize_or_zero() * delta * 1.0;
 
-        move_dir = move_dir.normalize_or_zero() * delta * 200.0;
+        move_dir = move_dir.normalize_or_zero() * delta * move_speed;
 
         player.transform.walk(move_dir);
         player.transform.add_rotation(look_delta);
