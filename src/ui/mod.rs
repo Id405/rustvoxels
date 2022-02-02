@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures::lock::Mutex;
 use winit::event::ElementState;
 
-use crate::{game::World, renderer::RenderContext, config::ConfigValue};
+use crate::{config::ConfigValue, game::World, renderer::RenderContext};
 
 use imgui::*;
 
@@ -25,12 +25,30 @@ impl UiState {
 
         // todo make work from default config value
         UiState {
-            samples: config.get_var("renderer_raytracer_samples").unwrap().as_i32(),
-            max_steps: config.get_var("renderer_raytracer_max_steps").unwrap().as_i32(),
-            reprojection_percent: config.get_var("renderer_denoiser_reprojection_percent").unwrap().as_f32(),
-            blur_strength: config.get_var("renderer_denoiser_edge_avoiding_blur_strength").unwrap().as_f32(),
-            move_speed: config.get_var("game_input_movement_speed").unwrap().as_f32(),
-            do_lighting: config.get_var("renderer_raytracer_do_lighting").unwrap().as_bool(),
+            samples: config
+                .get_var("renderer_raytracer_samples")
+                .unwrap()
+                .as_i32(),
+            max_steps: config
+                .get_var("renderer_raytracer_max_steps")
+                .unwrap()
+                .as_i32(),
+            reprojection_percent: config
+                .get_var("renderer_denoiser_reprojection_percent")
+                .unwrap()
+                .as_f32(),
+            blur_strength: config
+                .get_var("renderer_denoiser_edge_avoiding_blur_strength")
+                .unwrap()
+                .as_f32(),
+            move_speed: config
+                .get_var("game_input_movement_speed")
+                .unwrap()
+                .as_f32(),
+            do_lighting: config
+                .get_var("renderer_raytracer_do_lighting")
+                .unwrap()
+                .as_bool(),
             world: world.clone(),
         }
     }
@@ -41,11 +59,26 @@ impl UiState {
 
         // todo make work from default config value
         config.set_var("renderer_raytracer_samples", ConfigValue::I32(self.samples));
-        config.set_var("renderer_raytracer_max_steps", ConfigValue::I32(self.max_steps));
-        config.set_var("renderer_denoiser_reprojection_percent", ConfigValue::F32(self.reprojection_percent));
-        config.set_var("renderer_denoiser_edge_avoiding_blur_strength", ConfigValue::F32(self.blur_strength));
-        config.set_var("game_input_movement_speed", ConfigValue::F32(self.move_speed));
-        config.set_var("renderer_raytracer_do_lighting", ConfigValue::Bool(self.do_lighting));
+        config.set_var(
+            "renderer_raytracer_max_steps",
+            ConfigValue::I32(self.max_steps),
+        );
+        config.set_var(
+            "renderer_denoiser_reprojection_percent",
+            ConfigValue::F32(self.reprojection_percent),
+        );
+        config.set_var(
+            "renderer_denoiser_edge_avoiding_blur_strength",
+            ConfigValue::F32(self.blur_strength),
+        );
+        config.set_var(
+            "game_input_movement_speed",
+            ConfigValue::F32(self.move_speed),
+        );
+        config.set_var(
+            "renderer_raytracer_do_lighting",
+            ConfigValue::Bool(self.do_lighting),
+        );
     }
 }
 

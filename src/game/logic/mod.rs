@@ -61,7 +61,10 @@ impl GameLogic {
     pub async fn input_event(&mut self, event: &InputEvent) {
         let mut world = self.world.lock().await;
         let config = world.config.as_ref().unwrap();
-        let sensitivity = config.get_var("game_input_mouse_sensitivity").unwrap().as_f32();
+        let sensitivity = config
+            .get_var("game_input_mouse_sensitivity")
+            .unwrap()
+            .as_f32();
         let player = world
             .player
             .as_mut()
@@ -82,7 +85,10 @@ impl GameLogic {
     pub async fn update(&mut self, delta: f32) {
         let mut world = self.world.lock().await;
         let config = world.config.as_ref().unwrap();
-        let move_speed = config.get_var("game_input_movement_speed").unwrap().as_f32();
+        let move_speed = config
+            .get_var("game_input_movement_speed")
+            .unwrap()
+            .as_f32();
         let player = world
             .player
             .as_mut()

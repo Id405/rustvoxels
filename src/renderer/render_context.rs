@@ -35,7 +35,9 @@ impl RenderContext {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH,
+                    features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH
+                        | wgpu::Features::TIMESTAMP_QUERY
+                        | wgpu::Features::PIPELINE_STATISTICS_QUERY,
                     limits: wgpu::Limits::default(),
                     label: None,
                 },

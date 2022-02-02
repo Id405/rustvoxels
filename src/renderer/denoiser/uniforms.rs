@@ -55,9 +55,17 @@ impl Uniforms {
         .into();
         self.focal_length = player.camera.focal_length();
         self.frame_count = player.camera.frame_count as i32;
-        self.enable_filtering = config.get_var("renderer_denoiser_enable_filtering").unwrap().as_i32();
-        self.reprojection_percent = config.get_var("renderer_denoiser_reprojection_percent").unwrap().as_f32();
-        self.blur_strength = config.get_var("renderer_denoiser_edge_avoiding_blur_strength").unwrap().as_f32();
+        self.enable_filtering = config
+            .get_var("renderer_denoiser_enable_filtering")
+            .unwrap()
+            .as_i32();
+        self.reprojection_percent = config
+            .get_var("renderer_denoiser_reprojection_percent")
+            .unwrap()
+            .as_f32();
+        self.blur_strength = config
+            .get_var("renderer_denoiser_edge_avoiding_blur_strength")
+            .unwrap()
+            .as_f32();
     }
 }
-

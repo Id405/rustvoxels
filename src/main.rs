@@ -113,7 +113,11 @@ fn main() {
                     }
                 }
                 DeviceEvent::Button { button, state } => {
-                    futures::executor::block_on(Ui::handle_click(world.clone(), &(button, state), &context));
+                    futures::executor::block_on(Ui::handle_click(
+                        world.clone(),
+                        &(button, state),
+                        &context,
+                    ));
                 }
                 _ => (),
             },

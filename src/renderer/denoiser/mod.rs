@@ -274,7 +274,8 @@ impl Denoiser {
 
         let texture_bind_group = context
             .device
-            .create_bind_group(&wgpu::BindGroupDescriptor { // TODO this is just plain confusing
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                // TODO this is just plain confusing
                 layout: &self.texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {

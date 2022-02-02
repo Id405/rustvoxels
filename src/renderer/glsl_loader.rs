@@ -69,6 +69,38 @@ impl<'a> ShaderBundle<'a> {
         }
     }
 
+    pub fn compute_from_path<S: Into<String>>(path: S) -> Self {
+        let path = path.into();
+        let source_frag =
+            read_to_string(format!("shaders/{}.comp", path)).expect("unable to read shader file");
+
+        let mut opts = CompileOptions::new().unwrap();
+        let mut compiler = Compiler::new().unwrap();
+
+        opts.set_source_language(SourceLanguage::GLSL);
+        opts.set_optimization_level(OptimizationLevel::Performance);
+        opts.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_1 as u32); // Platform compatibility issues will come from this. Needa force vulkan for every platform
+
+        opts.set_include_callback(move |_, _, _, _| {
+            todo!();
+        }); // Panic on include
+
+        let compute = compiler
+            .compile_into_spirv(
+                &source_frag,
+                ShaderKind::Compute,
+                &format!("shaders/{}.compute", path),
+                "main",
+                Some(&opts),
+            )
+            .shader_unwrap();
+
+        Self {
+            vertex: Cow::Owned(compute.as_binary().to_owned()),
+            fragment: Cow::Owned(compute.as_binary().to_owned()),
+        }
+    }
+
     pub unsafe fn create_shader_module_spirv(
         self,
         context: &RenderContext,
@@ -90,5 +122,17 @@ impl<'a> ShaderBundle<'a> {
                 });
 
         (shader_vertex, shader_fragment)
+    }
+
+    pub unsafe fn create_compute_shader_module_spirv(
+        self,
+        context: &RenderContext,
+    ) -> wgpu::ShaderModule {
+        context
+            .device
+            .create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+                label: Some("raytrace_vertex"),
+                source: self.vertex,
+            })
     }
 }

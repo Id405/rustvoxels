@@ -26,7 +26,7 @@ layout(set = 0, binding = 1) uniform texture2D noise_texture;
 #define SKYCOLOR vec3(0.1)
 #define SUNCOLOR vec3(1, 1, 1)
 #define LIGHTCOLOR vec3(5, 0, 0)
-#define LIGHTDIR vec3(-1.0, -1.0, 1.0)
+#define LIGHTDIR normalize(vec3(sin(float(frame_count)/360), cos(float(frame_count)/360), 1.0))
 #define SUNSHARPNESS 2
 #define SUNPOWER 4.0
 #define SKYPOWER 2.0
@@ -144,6 +144,8 @@ struct Hit {
 	vec3 normal;
 };
 
+float primary_dist = 0;
+
 // The main raytracing function, the alpha channel of the vec4 that is returned is the depth
 Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 	// Variables needed for the bounding box function
@@ -159,7 +161,7 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 	}
 
 	int maxLevel = octree_depth-1;
-	int level = maxLevel/5; // The current level in the octree
+	int level = maxLevel/2; // The current level in the octree
 
 	float complexity = 0; // Used to display a complexity map, however not required for the actual rendering
 
@@ -196,6 +198,8 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 		bool nonEmpty = getVoxel(gridPosition >> level, level); // Is the current voxel empty
 		bool belowEmpty = !getVoxel(gridPosition >> (level + 1), level + 1) && level < maxLevel; // Can we move upwards an octree level?
 		bool verticalMove = nonEmpty || belowEmpty; // If either we can move down or move up in the octree
+
+		// min_level = min(level - 1, int(floor((dist + primary_dist)/100)));
 
 		if(verticalMove) {
 			complexity += int(nonEmpty); // Increment the complexity variable to keep track of a complexity map
@@ -295,13 +299,14 @@ void mainImage(in vec2 fragCoord )
 	Hit primary = trace(raydir, raypos, true);
 
 	if (primary_ray_only == 1) {
-		outColor = vec4(primary.color, 1.0) * clamp(abs(dot(primary.normal, LIGHTDIR)), 0.8, 1.0);
+		outColor = vec4(primary.color, 1.0) * clamp(abs(dot(primary.normal, LIGHTDIR)), 0.5, 1.0);
 		outDepth = vec4(primary.normal, primary.depth/10000);
 		outAlbedo = vec4(primary.color, 1.0);
 		return;
 	}
 
 	raypos += raydir * (primary.depth - 0.01);
+	primary_dist = primary.depth;
 
 	if (primary.depth != 0.0) {
 	// Render the scenes samples

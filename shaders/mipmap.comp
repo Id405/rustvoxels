@@ -1,0 +1,38 @@
+#version 460
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 0, binding = 0) uniform texture3D u_src;
+layout(set = 0, binding = 1) uniform writeonly image3D u_dst;
+
+void main() {
+    ivec3 dst_uv = ivec3(gl_GlobalInvocationID.xyz);
+    ivec3 src_uv = 2 * dst_uv;
+
+    ivec3 offset[8];
+    offset[0] = src_uv;
+    offset[1] = src_uv + ivec3(1, 0, 0);
+    offset[2] = src_uv + ivec3(1, 1, 0);
+    offset[3] = src_uv + ivec3(1, 0, 1);
+    offset[4] = src_uv + ivec3(0, 1, 0);
+    offset[5] = src_uv + ivec3(0, 0, 1);
+    offset[6] = src_uv + ivec3(0, 1, 1);
+    offset[7] = src_uv + ivec3(1, 1, 1);
+
+    vec4 sum = vec4(0);
+    int count = 0;
+
+    for (int i=0; i < 8; i++) {
+        vec4 c = texelFetch(u_src, offset[i], 0);
+
+        if (c.a > 0.01) {
+            sum += c;
+            count++;
+        }
+    }
+
+    vec4 c = vec4(sum.rgb/float(count), sum.a/8);
+
+    imageStore(u_dst, dst_uv, c);
+}

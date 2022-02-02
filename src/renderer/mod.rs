@@ -6,6 +6,7 @@ use winit::{dpi::PhysicalSize, window};
 
 use crate::game::World;
 
+pub use glsl_loader::ShaderBundle;
 pub use render_context::RenderContext;
 
 use self::texture_atlas::TextureAtlas;
@@ -197,7 +198,7 @@ impl Renderer {
             .render(&mut encoder, &context, &self.vertex_buffer)
             .await;
 
-        self.texture_renderer
+        self.texture_renderer // This could be accomplished with just a copy command lol TODO
             .render(
                 &mut encoder,
                 &context,

@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use futures::lock::Mutex;
 
-use crate::{game::World, ui::{Ui, UiState}};
+use crate::{
+    game::World,
+    ui::{Ui, UiState},
+};
 
 use super::RenderContext;
 
@@ -44,6 +47,14 @@ impl Gui {
         render_texture_view: &wgpu::TextureView,
     ) {
         self.ui_state.update().await;
-        Ui::render_frame(self.world.clone(), &mut self.ui_state, encoder, context, render_texture_view, &mut self.imgui_renderer, ).await;
+        Ui::render_frame(
+            self.world.clone(),
+            &mut self.ui_state,
+            encoder,
+            context,
+            render_texture_view,
+            &mut self.imgui_renderer,
+        )
+        .await;
     }
 }

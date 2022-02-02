@@ -65,9 +65,18 @@ impl Uniforms {
         )
         .into();
         self.octree_depth = voxel_grid.get_mip_levels() as i32;
-        self.max_steps = config.get_var("renderer_raytracer_max_steps").unwrap().as_i32(); // TODO; config refactor
-        self.samples = config.get_var("renderer_raytracer_samples").unwrap().as_i32(); // TODO; config refactor
+        self.max_steps = config
+            .get_var("renderer_raytracer_max_steps")
+            .unwrap()
+            .as_i32(); // TODO; config refactor
+        self.samples = config
+            .get_var("renderer_raytracer_samples")
+            .unwrap()
+            .as_i32(); // TODO; config refactor
         self.camera_matrix = player.transform.as_matrix().into();
-        self.primary_ray_only = config.get_var("renderer_raytracer_do_lighting").unwrap().as_i32();
+        self.primary_ray_only = config
+            .get_var("renderer_raytracer_do_lighting")
+            .unwrap()
+            .as_i32();
     }
 }

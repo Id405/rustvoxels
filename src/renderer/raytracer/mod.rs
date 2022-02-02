@@ -211,12 +211,17 @@ impl Raytracer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&atlas.borrow().get_view("raytracer_binding_noise", context).unwrap()),
+                        resource: wgpu::BindingResource::TextureView(
+                            &atlas
+                                .borrow()
+                                .get_view("raytracer_binding_noise", context)
+                                .unwrap(),
+                        ),
                     },
                 ],
                 label: Some("world_bind_group"),
             });
-        
+
         Self {
             render_pipeline,
             raytrace_uniforms,

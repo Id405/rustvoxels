@@ -2,7 +2,12 @@ mod voxel_grid;
 
 pub use voxel_grid::VoxelGrid;
 
-use crate::{game::Player, renderer::RenderContext, ui::{Ui, UiState}, config::Config};
+use crate::{
+    config::Config,
+    game::Player,
+    renderer::RenderContext,
+    ui::{Ui, UiState},
+};
 
 #[derive(Default)]
 pub struct World {
