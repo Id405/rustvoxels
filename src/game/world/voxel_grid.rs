@@ -1,7 +1,8 @@
 use bytemuck::{Pod, Zeroable};
+use itertools::Itertools;
 //TODO refactor this entire module
 use rayon::prelude::*;
-use std::{borrow::Cow, convert::TryInto, io::Write, mem, num::NonZeroU32};
+use std::{borrow::Cow, collections::HashSet, convert::TryInto, io::Write, mem, num::NonZeroU32};
 use wgpu::{util::DeviceExt, BufferDescriptor};
 
 use crate::renderer::{RenderContext, ShaderBundle};
@@ -23,7 +24,7 @@ pub struct VoxelGrid {
     height: usize,
     length: usize,
     data: Vec<f32>,
-    changed_voxels: Vec<[usize; 3]>,
+    changed_voxels: Vec<[i32; 3]>,
     texture: Option<wgpu::Texture>,
 }
 
@@ -91,7 +92,7 @@ impl VoxelGrid {
     }
 
     fn set_data(&mut self, pos: [usize; 3], color: [u8; 4]) {
-        self.changed_voxels.push(pos);
+        self.changed_voxels.push(pos.map(|x| x as i32));
         let p = Self::grid_position(pos, (self.width, self.height, self.length));
 
         let slice = &mut self.data[p..p + 4];
@@ -154,7 +155,7 @@ impl VoxelGrid {
         self.texture.as_ref().unwrap()
     }
 
-    pub fn write_texture_data(&self, render_context: &RenderContext) {
+    pub fn write_texture_data(&mut self, render_context: &RenderContext) {
         let texture = match &self.texture {
             Some(texture) => texture,
             None => return,
@@ -209,6 +210,16 @@ impl VoxelGrid {
                                 view_dimension: wgpu::TextureViewDimension::D3,
                             },
                             binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None, // TODO optimize
+                            },
+                            binding: 2,
                             visibility: wgpu::ShaderStages::COMPUTE,
                             count: None,
                         },
@@ -294,13 +305,38 @@ impl VoxelGrid {
             })
             .collect::<Vec<_>>();
 
+        let mut invoke_positions: Vec<_> = self
+            .changed_voxels
+            .clone()
+            .into_iter()
+            .map(|x| [x[0], x[1], x[2], 0])
+            .collect();
+        self.changed_voxels.clear();
+
         for level in 1..self.get_mip_levels() as usize {
-            let div_factor = (2_usize).pow(level as u32);
-            let (width, height, length) = (
-                self.width / div_factor,
-                self.height / div_factor,
-                self.length / div_factor,
-            );
+            invoke_positions = invoke_positions
+                .into_iter()
+                .map(|x| [x[0] / 2, x[1] / 2, x[2] / 2, 0])
+                .unique()
+                .collect();
+
+            // TODO optimize, by de duplicating we can further optimise our thingie
+            // invoke_positions = invoke_positions.into_iter().unique().collect();
+
+            println!("{:?}", invoke_positions);
+            println!("{}", invoke_positions.len());
+
+            let invoke_positions_buffer =
+                render_context
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!(
+                            "Mipmap Compute Shader Invoke Positions Buffer Level {}",
+                            level
+                        )),
+                        usage: wgpu::BufferUsages::STORAGE,
+                        contents: bytemuck::cast_slice(invoke_positions.as_slice()),
+                    });
 
             let texture_view = views.get(level - 1).unwrap();
 
@@ -320,6 +356,10 @@ impl VoxelGrid {
                             binding: 1,
                             resource: wgpu::BindingResource::TextureView(&destination_texture),
                         },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: invoke_positions_buffer.as_entire_binding(),
+                        },
                     ],
                 });
 
@@ -335,9 +375,9 @@ impl VoxelGrid {
                 compute_pass.set_bind_group(0, &bind_group, &[]);
                 println!("{}", (level - 1) * 2 + 1);
                 compute_pass.dispatch(
-                    ((width as u32) / 8).max(1),
-                    ((length as u32) / 8).max(1),
-                    ((height as u32) / 8).max(1),
+                    ((invoke_positions.len() as f32) / 1024.0).ceil() as u32,
+                    1u32,
+                    1u32,
                 );
 
                 compute_pass.write_timestamp(&timestamp, (level - 1) as u32 * 2 + 1);
@@ -394,10 +434,7 @@ impl VoxelGrid {
             );
         }
 
-        println!(
-            "Generating mipmaps took {:.3} ms in total",
-            total_mip_cost
-        )
+        println!("Generating mipmaps took {:.3} ms in total", total_mip_cost)
     }
 
     pub fn get_mip_levels(&self) -> u32 {
