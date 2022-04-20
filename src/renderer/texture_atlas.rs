@@ -5,10 +5,17 @@ use winit::dpi::PhysicalSize;
 
 use super::RenderContext;
 
-#[derive(Debug)]
+#[derive(Clone, Copy)]
+pub struct TextureInfo {
+    pub size: (u32, u32, u32),
+    pub mip_levels: u32,
+}
+
 pub enum TextureType {
     TextureSwapChain(wgpu::Texture, wgpu::Texture),
     SingleTexture(wgpu::Texture),
+    DescriptorTexture(wgpu::Texture, TextureInfo), // Own only, don't mess with it at all
+    Buffer(wgpu::Buffer),
 }
 
 pub struct TextureAtlas {
@@ -93,8 +100,16 @@ impl TextureAtlas {
             texture_size,
         );
 
-        self.textures
-            .insert(name, TextureType::SingleTexture(texture));
+        self.textures.insert(
+            name,
+            TextureType::DescriptorTexture(
+                texture,
+                TextureInfo {
+                    size: (dimensions.0, dimensions.1, 1),
+                    mip_levels: 1,
+                },
+            ),
+        );
     }
 
     pub fn register_swapchain<S>(&mut self, name: S, context: &RenderContext)
@@ -144,8 +159,28 @@ impl TextureAtlas {
 
         let texture = context.device.create_texture(&descriptor);
 
-        self.textures
-            .insert(name, TextureType::SingleTexture(texture));
+        self.textures.insert(
+            name,
+            TextureType::DescriptorTexture(texture, TextureInfo {
+                size: (descriptor.size.width, descriptor.size.height, descriptor.size.depth_or_array_layers),
+                mip_levels: descriptor.mip_level_count,
+            }),
+        );
+    }
+
+    pub fn register_buffer<S>(
+        &mut self,
+        name: S,
+        descriptor: wgpu::BufferDescriptor,
+        context: &RenderContext,
+    ) where
+        S: Into<String>,
+    {
+        let name: String = name.into();
+
+        let buffer = context.device.create_buffer(&descriptor);
+
+        self.textures.insert(name, TextureType::Buffer(buffer));
     }
 
     pub fn resize(&mut self, context: &RenderContext) {
@@ -154,7 +189,32 @@ impl TextureAtlas {
             match self.textures.get(&name).unwrap() {
                 TextureType::TextureSwapChain(_, _) => self.register_swapchain(name, context),
                 TextureType::SingleTexture(_) => self.register(name, context),
+                TextureType::DescriptorTexture(_, _) => (),
+                TextureType::Buffer(_) => (),
             }
+        }
+    }
+
+    pub fn get<S>(&self, name: S, context: &RenderContext) -> Option<&wgpu::Texture>
+    where
+        S: Into<String>,
+    {
+        match self.textures.get(&name.into()) {
+            Some(texture_type) => {
+                match texture_type {
+                    TextureType::TextureSwapChain(texture1, texture2) => {
+                        match context.frame_count % 2 == 0 {
+                            // TODO ensure most recent texture is returned
+                            true => Some(&texture1),
+                            false => Some(&texture2),
+                        }
+                    }
+                    TextureType::SingleTexture(texture) => Some(&texture),
+                    TextureType::DescriptorTexture(texture, _) => Some(&texture),
+                    TextureType::Buffer(_) => None,
+                }
+            }
+            None => None,
         }
     }
 
@@ -175,6 +235,10 @@ impl TextureAtlas {
                     TextureType::SingleTexture(texture) => {
                         Some(texture.create_view(&TextureViewDescriptor::default()))
                     }
+                    TextureType::DescriptorTexture(texture, _) => {
+                        Some(texture.create_view(&TextureViewDescriptor::default()))
+                    }
+                    TextureType::Buffer(_) => None,
                 }
             }
             None => None,
@@ -206,6 +270,67 @@ impl TextureAtlas {
                     ));
                 }
             }
+        }
+
+        None
+    }
+
+    pub fn get_view_descriptor<S>(
+        &self,
+        name: S,
+        descriptor: &TextureViewDescriptor,
+        context: &RenderContext,
+    ) -> Option<wgpu::TextureView>
+    where
+        S: Into<String>,
+    {
+        match self.textures.get(&name.into()) {
+            Some(texture_type) => {
+                match texture_type {
+                    TextureType::TextureSwapChain(texture1, texture2) => {
+                        match context.frame_count % 2 == 0 {
+                            // TODO ensure most recent texture is returned
+                            true => Some(texture1.create_view(descriptor)),
+                            false => Some(texture2.create_view(descriptor)),
+                        }
+                    }
+                    TextureType::SingleTexture(texture) => Some(texture.create_view(descriptor)),
+                    TextureType::DescriptorTexture(texture, _) => {
+                        Some(texture.create_view(descriptor))
+                    }
+                    TextureType::Buffer(_) => None,
+                }
+            }
+            None => None,
+        }
+    }
+
+    pub fn get_info<S>(&self, name: S, context: &RenderContext) -> Option<TextureInfo>
+    where
+        S: Into<String>,
+    {
+        match self.textures.get(&name.into()) {
+            Some(texture_type) => match texture_type {
+                TextureType::TextureSwapChain(_, _) | TextureType::SingleTexture(_) => {
+                    let size = context.window.inner_size();
+                    Some(TextureInfo {
+                        size: (size.width, size.height, 1),
+                        mip_levels: 1,
+                    })
+                }
+                TextureType::DescriptorTexture(_, info) => Some(info.clone()),
+                TextureType::Buffer(_) => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_buffer<S>(&self, name: S, context: &RenderContext) -> Option<&wgpu::Buffer>
+    where
+        S: Into<String>,
+    {
+        if let Some(TextureType::Buffer(buffer)) = self.textures.get(&name.into()) {
+            return Some(buffer);
         }
 
         None

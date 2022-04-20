@@ -11,13 +11,16 @@ pub use render_context::RenderContext;
 
 use self::texture_atlas::TextureAtlas;
 
-mod denoiser;
-mod glsl_loader;
-mod gui_renderer;
-mod raytracer;
-mod render_context;
-mod texture_atlas;
-mod texture_renderer;
+pub mod denoiser; // Designing a render graph system would be beneficial to this code
+pub mod glsl_loader;
+pub mod gui_renderer;
+pub mod mipmapper;
+pub mod model_renderer;
+pub mod raytracer;
+pub mod render_context;
+pub mod texture_atlas;
+pub mod texture_renderer;
+pub mod voxelizer;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -75,6 +78,9 @@ pub struct Renderer {
     raytracer: raytracer::Raytracer,
     denoiser: denoiser::Denoiser,
     texture_renderer: texture_renderer::TextureRenderer,
+    model_renderer: model_renderer::ModelRenderer,
+    voxelizer: voxelizer::Voxelizer,
+    mipmapper: mipmapper::Mipmapper,
     gui: gui_renderer::Gui,
     world: Arc<Mutex<World>>,
     atlas: Rc<RefCell<TextureAtlas>>,
@@ -100,10 +106,12 @@ impl Renderer {
 
         context.surface.configure(&context.device, &surface_config);
 
-        // let swap_chain = context.device.create_swap_chain(&context.surface, &sc_desc);
+        let voxelizer = voxelizer::Voxelizer::new(context, world.clone(), atlas.clone()).await;
+
+        let mipmapper = mipmapper::Mipmapper::new(context, world.clone(), atlas.clone()).await;
 
         let raytracer =
-            raytracer::Raytracer::new(context, world.clone(), &surface_config, atlas.clone()).await; // the raytracer struct should hold its own swapchain in the future, or whatever the compute shader equivilant is
+            raytracer::Raytracer::new(context, world.clone(), &surface_config, atlas.clone()).await;
 
         let denoiser = denoiser::Denoiser::new(context, world.clone(), atlas.clone()).await;
 
@@ -118,6 +126,9 @@ impl Renderer {
                 .unwrap(),
         )
         .await;
+
+        let model_renderer =
+            model_renderer::ModelRenderer::new(context, world.clone(), &surface_config).await;
 
         let vertex_buffer = context
             .device
@@ -137,12 +148,12 @@ impl Renderer {
             denoiser,
             atlas,
             gui,
+            model_renderer,
+            voxelizer,
+            mipmapper,
         }
     }
 
-    // ALl of this texture management is just terrible and annoying and needs to be restructured.
-    // Renderer structs shouldnt own their textures, and neither should the renderer. There should
-    // be a texture atlas struct holding Arc<Texture> (or maybe Arc<Mutex<Texture>> if neccessary?).
     pub async fn resize(
         &mut self,
         context: &RenderContext,
@@ -190,12 +201,24 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
+        self.voxelizer.render(&mut encoder, &context).await;
+
+        context.queue.submit(std::iter::once(encoder.finish()));
+
+        let mut encoder = context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        self.mipmapper.render(context).await;
+
         self.raytracer
-            .render(&mut encoder, &context, &self.vertex_buffer)
+            .render(&mut encoder, context, &self.vertex_buffer)
             .await;
 
         self.denoiser
-            .render(&mut encoder, &context, &self.vertex_buffer)
+            .render(&mut encoder, context, &self.vertex_buffer)
             .await;
 
         self.texture_renderer // This could be accomplished with just a copy command lol TODO
@@ -208,6 +231,18 @@ impl Renderer {
                     .borrow()
                     .get_view("denoiser_attachment_color", context)
                     .unwrap(),
+                // &self.voxelizer.render_texture_view,
+                &frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
+            )
+            .await;
+
+        self.model_renderer
+            .render(
+                &mut encoder,
+                &context,
+                &self.vertex_buffer,
                 &frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default()),

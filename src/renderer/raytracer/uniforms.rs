@@ -1,10 +1,13 @@
 use crevice::std430::AsStd430;
-use std::{convert::TryInto, sync::Arc};
+use std::{cell::RefCell, convert::TryInto, rc::Rc, sync::Arc};
 
 use futures::lock::Mutex;
 use glam::{IVec2, IVec3, Mat4, Vec3};
 
-use crate::game::World;
+use crate::{
+    game::World,
+    renderer::{texture_atlas::TextureAtlas, RenderContext},
+};
 
 #[derive(Copy, Clone, Debug, AsStd430)]
 pub struct Uniforms {
@@ -20,7 +23,11 @@ pub struct Uniforms {
 }
 
 impl Uniforms {
-    pub async fn new(world: Arc<Mutex<World>>) -> Self {
+    pub async fn new(
+        context: &RenderContext,
+        world: Arc<Mutex<World>>,
+        atlas: Rc<RefCell<TextureAtlas>>,
+    ) -> Self {
         let mut uniforms = Self {
             scene_size: mint::Vector3 { x: 0, y: 0, z: 0 },
             resolution: mint::Vector2 { x: 0, y: 0 },
@@ -32,18 +39,19 @@ impl Uniforms {
             primary_ray_only: 0,
             camera_matrix: Mat4::IDENTITY.into(),
         };
-        uniforms.update(world).await;
+        uniforms.update(context, world, atlas).await;
         uniforms
     }
 
-    pub async fn update(&mut self, world: Arc<Mutex<World>>) {
+    pub async fn update(
+        &mut self,
+        context: &RenderContext, // TODO: Random musings as I work on this code, there should be a combined ContextAtlasWorld struct
+        world: Arc<Mutex<World>>,
+        atlas: Rc<RefCell<TextureAtlas>>,
+    ) {
         let world = world.lock().await;
         let player = world
             .player
-            .as_ref()
-            .expect("ERROR: expected resource not present");
-        let voxel_grid = world
-            .voxel_grid
             .as_ref()
             .expect("ERROR: expected resource not present");
         let config = world
@@ -58,13 +66,9 @@ impl Uniforms {
         .into();
         self.frame_count = player.camera.frame_count as i32;
         self.focal_length = player.camera.focal_length();
-        self.scene_size = IVec3::new(
-            voxel_grid.width() as i32,
-            voxel_grid.length() as i32,
-            voxel_grid.height() as i32,
-        )
-        .into();
-        self.octree_depth = voxel_grid.get_mip_levels() as i32;
+        let info = atlas.borrow_mut().get_info("voxelizer_attachment_world", context).unwrap();
+        self.scene_size = IVec3::new(info.size.0 as i32, info.size.1 as i32, info.size.2 as i32).into();
+        self.octree_depth = info.mip_levels as i32;
         self.max_steps = config
             .get_var("renderer_raytracer_max_steps")
             .unwrap()

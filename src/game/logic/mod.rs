@@ -1,3 +1,6 @@
+use std::env;
+use std::ops::Deref;
+use std::path::Path;
 use std::{rc::Rc, sync::Arc};
 
 use futures::lock::Mutex;
@@ -12,6 +15,8 @@ use crate::renderer::RenderContext;
 
 use self::keyboard_tracker::KeyboardTracker;
 
+use super::entity::components::Model;
+use super::entity::Handle;
 use super::{Camera, Player, Transform, World};
 
 mod keyboard_tracker;
@@ -25,36 +30,68 @@ pub enum InputEvent {
 pub struct GameLogic {
     world: Arc<Mutex<World>>,
     keyboard_state: KeyboardTracker,
+    garfield_handle: Handle,
 }
 
 impl GameLogic {
-    pub async fn new(world: Arc<Mutex<World>>) -> Self {
-        {
-            let mut world_lock = world.lock().await;
-            let config = world_lock.config.as_ref().unwrap();
-            let fov = config.get_var("renderer_fov").unwrap().as_f32();
+    pub async fn new(world: Arc<Mutex<World>>, context: &RenderContext) -> Self {
+        let mut world_lock = world.lock().await;
+        let config = world_lock.config.as_ref().unwrap();
+        let fov = config.get_var("renderer_fov").unwrap().as_f32();
 
-            world_lock.player = Some(Player {
-                transform: Transform::new(
-                    Vec3::new(-20.717182, 216.95955, 98.43643),
-                    Vec3::new(-0.30362973, 0.0, -2.5180235),
-                ),
-                camera: Camera {
-                    fov,
-                    size: PhysicalSize {
-                        width: 1,
-                        height: 1,
-                    },
-                    frame_count: 0,
+        world_lock.player = Some(Player {
+            // TODO Player should be an entity
+            transform: Transform::new(
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::ONE,
+            ),
+            camera: Camera {
+                fov,
+                size: PhysicalSize {
+                    width: 1,
+                    height: 1,
                 },
-            });
-        }
+                frame_count: 0,
+            },
+        });
+
+        let path = Path::new("assets/models/garfield/garfield.obj");
+
+        println!("{:?}", path);
+
+        let handle = world_lock.create_entity(); //TODO instead have a model where you create the entity struct, then add it to the world, instead of adding entity struct to world, then adding components
+
+        world_lock.add_component(
+            handle.clone(),
+            Box::new(Model::load(
+                &context,
+                path,
+                Transform::new(
+                    Vec3::new(0.0, 0.0, 0.0),
+                    Vec3::new(0.0, 0.0, 0.0),
+                    Vec3::new(1.0, 1.0, 1.0),
+                ),
+            )),
+        );
+
+        world_lock.add_component(
+            handle,
+            Box::new(Transform::new(
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::ONE,
+            )),
+        );
+
+        drop(world_lock);
 
         let keyboard_state = KeyboardTracker::new();
 
         Self {
             world,
             keyboard_state,
+            garfield_handle: handle,
         }
     }
 
@@ -145,5 +182,15 @@ impl GameLogic {
 
         player.transform.walk(move_dir);
         player.transform.add_rotation(look_delta);
+
+        world
+            .entities
+            .get_mut(&self.garfield_handle.uuid)
+            .unwrap()
+            .get_components_mut::<Model>()
+            .get_mut(0)
+            .unwrap()
+            .transform
+            .add_rotation(Vec3::new(0.0, 0.0, 0.01));
     }
 }

@@ -36,8 +36,8 @@ impl RenderContext {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH
-                        | wgpu::Features::TIMESTAMP_QUERY
-                        | wgpu::Features::PIPELINE_STATISTICS_QUERY,
+                        | wgpu::Features::CLEAR_COMMANDS
+                        | wgpu::Features::POLYGON_MODE_LINE,
                     limits: wgpu::Limits::default(),
                     label: None,
                 },

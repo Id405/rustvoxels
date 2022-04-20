@@ -9,6 +9,7 @@ resolver="2"
 
 [dependencies]
 bytemuck = { version = "1.7", features = [ "derive", "extern_crate_alloc" ] }
+chrono = "0.4.19"
 clap = "3.0.4"
 crevice = "0.8.0"
 env_logger = "0.9.0"
@@ -23,5 +24,7 @@ mint = "0.5.7"
 naga = "0.8.1"
 rayon = "1.5.1"
 shaderc = "0.7.2"
+tobj = "3.2.0"
+perlin_noise = "1.0.1"
 wgpu = { version = "0.12", features = [ "spirv" ] }
 winit = "0.26.1"

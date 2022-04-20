@@ -22,7 +22,7 @@ fn main() {
 
     let world = Arc::new(Mutex::new(World::new(&context)));
 
-    let mut game_logic = futures::executor::block_on(GameLogic::new(world.clone()));
+    let mut game_logic = futures::executor::block_on(GameLogic::new(world.clone(), &context));
 
     let mut renderer =
         futures::executor::block_on(renderer::Renderer::new(&context, world.clone()));

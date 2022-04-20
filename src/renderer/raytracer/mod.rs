@@ -40,7 +40,7 @@ impl Raytracer {
 
         let (shader_vertex, shader_fragment) = shaders;
 
-        let raytrace_uniforms = Uniforms::new(world.clone()).await;
+        let raytrace_uniforms = Uniforms::new(context, world.clone(), atlas.clone()).await;
 
         let raytrace_uniform_buffer =
             context
@@ -80,14 +80,11 @@ impl Raytracer {
             });
 
         let world_lock = world.lock().await;
-        let scene = world_lock
-            .voxel_grid
-            .as_ref()
-            .expect("ERROR: expected resource not present");
 
-        let world_texture = scene.as_texture();
-
-        let world_texture_view = world_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let world_texture_view = atlas
+            .borrow_mut()
+            .get_view("voxelizer_attachment_world", context)
+            .unwrap();
 
         // let world_sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
         //     address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -301,7 +298,7 @@ impl Raytracer {
     }
 
     async fn update_uniform_data(&mut self, context: &RenderContext) {
-        self.raytrace_uniforms.update(self.world.clone()).await;
+        self.raytrace_uniforms.update(context, self.world.clone(), self.atlas.clone()).await;
         context.queue.write_buffer(
             &self.raytrace_uniform_buffer,
             0,
