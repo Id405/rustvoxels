@@ -16,9 +16,12 @@ use crate::{
     renderer::{glsl_loader, RenderContext},
 };
 
+use self::uniforms::Uniforms;
+
 use super::{texture_atlas::TextureAtlas, ShaderBundle};
 
-pub struct Mipmapper {
+
+pub struct Clear {
     compute_pipeline: wgpu::ComputePipeline,
     compute_bind_group_layout: wgpu::BindGroupLayout,
     world: Arc<Mutex<World>>,
@@ -30,7 +33,7 @@ pub struct Mipmapper {
     length: i32,
 }
 
-impl Mipmapper {
+impl Clear {
     pub async fn new(
         context: &RenderContext,
         world: Arc<Mutex<World>>,

@@ -27,7 +27,6 @@ pub struct Voxelizer {
     uniforms_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     image_write_bind_group: wgpu::BindGroup,
-    voxels_changed_bind_group: wgpu::BindGroup,
     depth_texture: wgpu::Texture,
     depth_texture_view: wgpu::TextureView,
     render_texture: wgpu::Texture,
@@ -55,9 +54,9 @@ impl Voxelizer {
         let (shader_vertex, shader_fragment) = shaders;
 
         let texture_size = wgpu::Extent3d {
-            width: 512,
-            height: 512,
-            depth_or_array_layers: 512,
+            width: 128,
+            height: 128,
+            depth_or_array_layers: 128,
         };
 
         atlas.borrow_mut().register_from_descriptor(
@@ -147,22 +146,11 @@ impl Voxelizer {
                 label: Some("Voxelizer Uniform Bind Group"),
             });
 
-        atlas.borrow_mut().register_buffer(
-            "voxelizer_binding_voxels_changed_index",
-            wgpu::BufferDescriptor {
-                label: Some("Voxelizer Index Buffer"),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                size: 4,
-                mapped_at_creation: false,
-            },
-            context,
-        );
-
         let image_write_bind_group_layout =
             context
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Voxelizer Image Write And Index Atomic Bind Group Layout (otherwise known as VIWAIABGL"),
+                    label: Some("Voxelizer Image Write Bind Group Layout"),
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             ty: wgpu::BindingType::StorageTexture {
@@ -174,16 +162,6 @@ impl Voxelizer {
                             visibility: wgpu::ShaderStages::FRAGMENT,
                             count: None,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None, // TODO optimize
-                            },
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            count: None,
-                        }
                     ],
                 });
 
@@ -213,64 +191,10 @@ impl Voxelizer {
                                 )
                                 .unwrap(),
                         ),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: atlas
-                            .borrow()
-                            .get_buffer("voxelizer_binding_voxels_changed_index", context)
-                            .unwrap()
-                            .as_entire_binding(),
-                    },
+                    }
                 ],
                 label: Some("Voxelizer Image Write Bind Group"),
             });
-
-        atlas.borrow_mut().register_buffer(
-            "voxelizer_binding_voxels_changed",
-            wgpu::BufferDescriptor {
-                label: Some("Voxelizer Index Buffer"),
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::MAP_READ
-                    | wgpu::BufferUsages::COPY_DST,
-                size: 2u64.pow(20),
-                mapped_at_creation: false,
-            },
-            context,
-        );
-
-        let voxels_changed_bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Voxelizer Written Indices Buffers"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None, // TODO optimize
-                        },
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        count: None,
-                    }],
-                });
-
-        let voxels_changed_bind_group =
-            context
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Voxelizer Written Indices Bind Group"),
-                    layout: &voxels_changed_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: atlas
-                            .borrow()
-                            .get_buffer("voxelizer_binding_voxels_changed", context)
-                            .unwrap()
-                            .as_entire_binding(),
-                    }],
-                });
 
         let render_pipeline_layout =
             context
@@ -281,7 +205,6 @@ impl Voxelizer {
                         &uniform_bind_group_layout,
                         &material_layout,
                         &image_write_bind_group_layout,
-                        &voxels_changed_bind_group_layout,
                     ],
                     push_constant_ranges: &[],
                 });
@@ -331,8 +254,8 @@ impl Voxelizer {
                 });
 
         let extent = wgpu::Extent3d {
-            width: 512, //TODO fix hardcoded scene size
-            height: 512,
+            width: 128, //TODO fix hardcoded scene size
+            height: 128,
             depth_or_array_layers: 1,
         };
 
@@ -373,7 +296,6 @@ impl Voxelizer {
             size,
             world,
             image_write_bind_group,
-            voxels_changed_bind_group,
             atlas: atlas.clone(),
         }
     }
@@ -382,31 +304,6 @@ impl Voxelizer {
         self.uniforms
             .update(context, self.world.clone(), self.atlas.clone())
             .await;
-        encoder.clear_texture(
-            self.atlas
-                .borrow_mut()
-                .get("voxelizer_attachment_world", context)
-                .unwrap(),
-            &wgpu::ImageSubresourceRange::default(),
-        );
-        encoder.clear_buffer(
-            &self
-                .atlas
-                .borrow()
-                .get_buffer("voxelizer_binding_voxels_changed", context)
-                .unwrap(),
-            0,
-            Some(2u64.pow(20).try_into().unwrap()),
-        );
-        encoder.clear_buffer(
-            &self
-                .atlas
-                .borrow()
-                .get_buffer("voxelizer_binding_voxels_changed_index", context)
-                .unwrap(),
-            0,
-            Some((size_of::<u32>() as u64).try_into().unwrap()),
-        );
 
         let world = self.world.lock().await;
 
@@ -436,8 +333,6 @@ impl Voxelizer {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.image_write_bind_group, &[]);
-            render_pass.set_bind_group(3, &self.voxels_changed_bind_group, &[]);
-            // render_pass.set_bind_group(1, &self.)
 
             for model in components.clone() {
                 self.uniforms

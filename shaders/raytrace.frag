@@ -26,7 +26,8 @@ layout(set = 0, binding = 1) uniform texture2D noise_texture;
 #define SKYCOLOR vec3(0.1)
 #define SUNCOLOR vec3(1, 1, 1)
 #define LIGHTCOLOR vec3(5, 0, 0)
-#define LIGHTDIR normalize(vec3(sin(float(frame_count)/360), cos(float(frame_count)/360), 1.0))
+// #define LIGHTDIR normalize(vec3(sin(float(frame_count)/360), cos(float(frame_count)/360), 1.0))
+#define LIGHTDIR normalize(vec3(0.5, 0.5, 1.0))
 #define SUNSHARPNESS 2
 #define SUNPOWER 4.0
 #define SKYPOWER 2.0

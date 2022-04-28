@@ -1,16 +1,13 @@
 #version 460
 #extension GL_EXT_samplerless_texture_functions : require
 
-layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform texture3D u_src;
-layout(rgba32f, set = 0, binding = 1) uniform writeonly image3D u_dst;
-layout(set = 0, binding = 2) buffer readonly invoke_positions_buffer {
-    ivec4 invoke_positions[];
-};
+layout(set = 0, binding = 1) uniform writeonly image3D u_dst;
 
 void main() {
-    ivec3 dst_uv = invoke_positions[gl_GlobalInvocationID.x].xzy;
+    ivec3 dst_uv = ivec3(gl_GlobalInvocationID.xyz);
     ivec3 src_uv = 2 * dst_uv;
 
     ivec3 offset[8];
@@ -37,7 +34,5 @@ void main() {
 
     vec4 c = vec4(sum.rgb/float(count), sum.a/8);
 
-    c = vec4(1.0);
-
-    imageStore(u_dst, dst_uv, vec4(1));
+    imageStore(u_dst, dst_uv, c);
 }

@@ -203,14 +203,6 @@ impl Renderer {
 
         self.voxelizer.render(&mut encoder, &context).await;
 
-        context.queue.submit(std::iter::once(encoder.finish()));
-
-        let mut encoder = context
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
         self.mipmapper.render(context).await;
 
         self.raytracer
@@ -258,6 +250,14 @@ impl Renderer {
                     .create_view(&wgpu::TextureViewDescriptor::default()),
             )
             .await;
+
+        // encoder.clear_texture(
+        //     self.atlas
+        //         .borrow_mut()
+        //         .get("voxelizer_attachment_world", context)
+        //         .unwrap(),
+        //     &wgpu::ImageSubresourceRange::default(),
+        // );
 
         // submit will accept anything that implements IntoIter
         context.queue.submit(std::iter::once(encoder.finish()));

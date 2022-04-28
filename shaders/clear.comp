@@ -1,0 +1,12 @@
+#version 460
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0)  writeonly restrict uniform image3D u_texture;
+
+void main() {
+    ivec3 uv = ivec3(gl_GlobalInvocationID.xyz);
+
+    imageStore(u_texture, uv, vec4(0));
+}
