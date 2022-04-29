@@ -161,7 +161,7 @@ Hit trace(vec3 raydir, vec3 raypos, bool primary) {
 		}
 	}
 
-	int maxLevel = octree_depth-1;
+	int maxLevel = 0/*octree_depth-1*/;
 	int level = maxLevel/2; // The current level in the octree
 
 	float complexity = 0; // Used to display a complexity map, however not required for the actual rendering

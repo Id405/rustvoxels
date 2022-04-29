@@ -1,20 +1,8 @@
-use std::{cell::RefCell, convert::TryInto, mem::size_of, num::NonZeroU32, rc::Rc, sync::Arc};
+use std::{cell::RefCell, num::NonZeroU32, rc::Rc, sync::Arc};
 
-use crevice::std430::{AsStd430, Std430};
 use futures::lock::Mutex;
-use glam::IVec2;
-use itertools::Itertools;
-use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
 
-use crate::{
-    game::{
-        entity::components::model::{ModelVertex, Vertex},
-        entity::components::Model,
-        World,
-    },
-    renderer::{glsl_loader, RenderContext},
-};
+use crate::{game::World, renderer::RenderContext};
 
 use super::{texture_atlas::TextureAtlas, ShaderBundle};
 
@@ -179,9 +167,9 @@ impl Mipmapper {
                 compute_pass.set_pipeline(&self.compute_pipeline);
                 compute_pass.set_bind_group(0, &self.bind_groups.get(level - 1).unwrap(), &[]);
                 compute_pass.dispatch(
-                    ((width as u32)).max(1),
-                    ((length as u32)).max(1),
-                    ((height as u32)).max(1),
+                    (width as u32).max(1),
+                    (length as u32).max(1),
+                    (height as u32).max(1),
                 );
             }
         }
