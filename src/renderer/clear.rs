@@ -85,7 +85,7 @@ impl Clear {
         let compute_shader;
 
         unsafe {
-            compute_shader = ShaderBundle::compute_from_path("mipmap")
+            compute_shader = ShaderBundle::compute_from_path("clear")
                 .create_compute_shader_module_spirv(context);
         }
 
